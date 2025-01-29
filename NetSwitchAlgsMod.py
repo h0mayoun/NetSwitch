@@ -11,6 +11,11 @@ class NetSwitch:
         self.countonce = True
         self.checkercount_matrix()
         self.swt_done = 0
+        self.klpair = []
+        for kl in reversed(range(1, self.n)):
+            for l in range(self.n - kl):
+                if kl + l < self.n and kl + l >= 0:
+                    self.klpair.append((min(kl + l, l), max(kl + l, l)))
 
     def sort_adj(self):
         sortIdx = np.argsort(-self.deg)
@@ -442,28 +447,39 @@ class NetSwitch:
         while i < self.n - 1:
             # print(i, j)
             if self.N[i, j] != 0:
-                k, l = self.largest_kl(i, j)
-                swt = (i, j, k, l)
+                for k, l in self.klpair:
+                    if k == i or k == j or l == i or l == j:
+                        continue
+                    if (
+                        self.A[i, k] == 0
+                        and self.A[j, k] == 1
+                        and self.A[i, l] == 1
+                        and self.A[j, l] == 0
+                    ):
+                        swt = (i, j, k, l)
+                        edgeAdded = (
+                            partition[i] * partition[k] + partition[j] * partition[l]
+                        )
+                        edgeRmved = (
+                            partition[i] * partition[l] + partition[j] * partition[k]
+                        )
 
-                edgeAdded = partition[i] * partition[k] + partition[j] * partition[l]
-                edgeRmved = partition[i] * partition[l] + partition[j] * partition[k]
-
-                if edgeAdded == -2 and edgeRmved == 2 and 1 in option:
-                    self.switch(swt, update_B=False)
-                    self.swt_done += 1
-                    return 1
-                elif edgeAdded == edgeRmved and edgeAdded != 0 and 2 in option:
-                    self.switch(swt, update_B=False)
-                    self.swt_done += 1
-                    return 1
-                elif edgeAdded == 0 and edgeRmved == 0 and 3 in option:
-                    self.switch(swt, update_B=False)
-                    self.swt_done += 1
-                    return 1
-                elif edgeAdded == 2 and edgeRmved == -2 and 4 in option:
-                    self.switch(swt, update_B=False)
-                    self.swt_done += 1
-                    return 1
+                        if edgeAdded == -2 and edgeRmved == 2 and 1 in option:
+                            self.switch(swt, update_B=False)
+                            self.swt_done += 1
+                            return 1
+                        elif edgeAdded == edgeRmved and edgeAdded != 0 and 2 in option:
+                            self.switch(swt, update_B=False)
+                            self.swt_done += 1
+                            return 1
+                        elif edgeAdded == 0 and edgeRmved == 0 and 3 in option:
+                            self.switch(swt, update_B=False)
+                            self.swt_done += 1
+                            return 1
+                        elif edgeAdded == 2 and edgeRmved == -2 and 4 in option:
+                            self.switch(swt, update_B=False)
+                            self.swt_done += 1
+                            return 1
 
             j -= 1
             if j == i:
