@@ -48,8 +48,8 @@ I = np.eye(n)
 v2, u2 = getLk(I - Dsqrt @ G.A @ Dsqrt, vpar)
 s = np.sign(u2)
 
-sPos = np.astype(s > 0, np.float32).reshape(-1, 1)
-sNeg = np.astype(s < 0, np.float32).reshape(-1, 1)
+sPos = (s > 0).astype(np.float32).reshape(-1, 1)
+sNeg = (s < 0).astype(np.float32).reshape(-1, 1)
 #
 plt.figure()
 cmap = colors.ListedColormap(["tab:blue", "white", "tab:purple", "tab:red"])
@@ -70,8 +70,8 @@ ite = 1
 while True:
     # print(".", end="", flush=True)
 
-    sPos = np.astype(s > 0, np.float32).reshape(-1, 1)
-    sNeg = np.astype(s < 0, np.float32).reshape(-1, 1)
+    sPos = (s > 0).astype(np.float32).reshape(-1, 1)
+    sNeg = (s < 0).astype(np.float32).reshape(-1, 1)
 
     d1 = sPos.T @ D @ sPos
     d2 = sNeg.T @ D @ sNeg
