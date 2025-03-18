@@ -1,5 +1,5 @@
 import numpy as np
-
+import random
 
 class NetSwitch:
 
@@ -364,7 +364,7 @@ class NetSwitch:
 
         return swt_num if self.total_checkers() == 0 else -1
 
-    def switch_A_par(self, partition, alg="RAND", count=-1, maxtry=10):
+    def switch_A_par(self, partition, option = [1], alg="RAND", count=-1, maxtry=10, temp = 1):
         """Performs a number of switchings with a specified algorithm on the adjacency matrix
         The number of switchings to perform is input by the 'count' argument
         count=-1 results in continous switchings until no checkerboard is left
@@ -426,14 +426,31 @@ class NetSwitch:
                 - partition[i] * partition[l]
                 - partition[j] * partition[k]
             )
-            if delta < 0:
-                # print(delta, end=" ")
-                self.switch(swt, update_B=(True if alg == "BEST" else False))
+            edgeAdded = (
+                            partition[i] * partition[k] + partition[j] * partition[l]
+                        )
+            edgeRmved = (
+                partition[i] * partition[l] + partition[j] * partition[k]
+            )
+            chance = random.random()
+            if edgeAdded == -2 and edgeRmved == 2 and 1 in option:
+                self.switch(swt, update_B=False)
                 self.swt_done += 1
-                swt_num += 1
-                count -= 1
+                return 1
+            elif edgeAdded == edgeRmved and edgeAdded != 0 and 2 in option and chance<=temp:
+                self.switch(swt, update_B=False)
+                self.swt_done += 1
+                return 1
+            elif edgeAdded == 0 and edgeRmved == 0 and 3 in option and chance<=temp:
+                self.switch(swt, update_B=False)
+                self.swt_done += 1
+                return 1
+            elif edgeAdded == 2 and edgeRmved == -2 and 4 in option and chance<=temp:
+                self.switch(swt, update_B=False)
+                self.swt_done += 1
+                return 1
 
-        return swt_num if self.total_checkers() == 0 else -1
+        return -1
 
     def switch_A_par_2(self, partition, option=[1]):
         """Performs a number of switchings with a specified algorithm on the adjacency matrix

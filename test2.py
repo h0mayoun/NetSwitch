@@ -25,27 +25,11 @@ p = 0.6
 ERgraph = ig.Graph.Erdos_Renyi(n=n, p=p)
 G = NetSwitch(ERgraph)
 
-L = np.array(ERgraph.laplacian())
-A = np.array(ERgraph.get_adjacency().data)
-s = np.array(np.sign(np.random.rand(n) - 0.5)).reshape(-1, 1)
+A = G.A
+D = np.diag(G.A @ G.A)
+L = D - A
 
-D = np.diag(np.diag(G.A @ G.A))
-D_halfinv = np.astype(np.diag(1 / np.sqrt(np.diag(G.A @ G.A))),np.float32)
-D_half = np.astype(np.diag(np.sqrt(np.diag(G.A @ G.A))),np.float32)
-I = np.eye(n)
+P = (A.T / D).T
+print(P)
 
-print("D")
-print(D_half)
-
-print("L")
-v, u = getLk(D - G.A, np.arange(n))
-print(v, "\n", u)
-print( D_halfinv @ u @ np.diag(v) @ np.linalg.inv(u) @ D_halfinv)
-
-print("Ln")
-v, u = getLk(I - D_halfinv @ G.A @ D_halfinv, np.arange(n))
-print(v, "\n", u)
-
-print("An")
-v, u = getLk(D_halfinv @ G.A @ D_halfinv, np.arange(n))
-print(v, "\n", u)
+print(np.linalg.eig(P))
