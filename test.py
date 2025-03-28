@@ -4,106 +4,172 @@ import igraph as ig
 import matplotlib.pyplot as plt
 from matplotlib import colors
 from NetSwitchAlgsMod import NetSwitch
+np.set_printoptions(precision = 2,suppress = True,linewidth = np.inf)
+import csv
+import sys
+#random.seed(3)
+def getLk(M, k):
+    # get the list of eigenvalue eigenvector sorted ascendingly
+    eigVal, eigVec = np.linalg.eig(M)
+    idx = eigVal.argsort()
+    eigVal = eigVal[idx]
+    eigVec = eigVec[:, idx]
+    return eigVal[k], eigVec[:, k]
 
-n = 5
-pair = []
-for kj in reversed(range(1, n)):
-    for j in range(n - kj):
-        # print(j + kj, j)
-        if kj + j < n and kj + j >= 0:
-            pair.append((kj + j, j))
+n=128
+p=12/n
 
-for k, l in pair:
-    print(k, l)
-# sumpair = [(sum(t), t) for t in pair]
-# sort the new list based on the first element (the sum)
-# pair = sorted(sumpair, key=lambda x: x[0])
-# print(pair)
-# print(len(pair))
-# # Initializing NetSwitch  with an ER network
-# random.seed(1)
-# np.random.seed(1)
-# n = 256
-# p = 0.03
-# ERgraph = ig.Graph.Erdos_Renyi(n=n, p=p)
-# G = NetSwitch(ERgraph)
+graph = ig.Graph.Barabasi(n=n, m=4)
 
-# L = np.array(ERgraph.laplacian())
-# A = np.array(ERgraph.get_adjacency().data)
-# s = np.array(np.sign(np.random.rand(n) - 0.5)).reshape(-1, 1)
+G = NetSwitch(graph)
+GStd = NetSwitch(graph)
 
-# D = np.diag(np.diag(G.A @ G.A))
-# D_half = np.diag(np.sqrt(np.diag(G.A @ G.A)))
-# I = np.eye(n)
-# # print(D)
-# # print("Min Cut:", ERgraph.mincut())
+print(G.A)
+lambdas = np.zeros((4, 0))
 
-# # Min-cut
-# # pid = ERgraph.mincut().partition
-# # s[pid[0]] = -1
-# # s[pid[1]] = 1
+cutlist = np.zeros(n)
+for i in range(n):
+    for j in range(i+1,n):
+        if G.A[i,j] != 0:
+            for k in range(j+1):
+                if k>=i:
+                    cutlist[k] +=1
+                
 
-# # eig_values, eig_vectors = np.linalg.eig(D - G.A)
-# eig_values, eig_vectors = np.linalg.eig(I - D_half @ G.A @ D_half)
-# fiedler_pos = np.where(eig_values.real == np.sort(eig_values.real)[1])[0][0]
-# fiedler_vector = np.transpose(eig_vectors)[fiedler_pos]
-# # print(np.sign(fiedler_vector))
-# # print(np.sort(eig_values.real))
+#print(G.A)
+#print(cutlist) 
+Dsqrt = np.diag(1.0 / np.sqrt(G.deg))
+A_n = Dsqrt @ G.A @ Dsqrt
+m = sum(G.deg)/2
 
-# s = np.sign(fiedler_vector)
-# eig_values, eig_vectors = np.linalg.eig(D - G.A)
-# fiedler_pos = np.where(eig_values.real == np.sort(eig_values.real)[1])[0][0]
-# fiedler_vector = np.transpose(eig_vectors)[fiedler_pos]
-# print(np.sort(eig_values.real))
-# # fiedler
+modularity = np.zeros(n)
+B = np.zeros((n,n))
+for i in range(n):
+    for j in range(n):
+        B[i,j] = G.A[i,j] - (G.deg[i]*G.deg[j])/(2*m)
 
-# deltaA = np.zeros((n, n))
-# print(s.T @ D @ s - s.T @ G.A @ s)
-# print()
+for p in range(n):
+    s = np.array([-1 if i<=p else 1 for i in range(n)])
+    modularity[p] = (s.T @ B @ s)/sum(G.deg)
 
-# plt.figure()
-# cmap = colors.ListedColormap(["white", "tab:blue"])
-# plt.subplot(1, 2, 1)
-# plt.title("Before switching")
-# plt.imshow(G.A, cmap=cmap)
-# plt.xticks([])
-# plt.yticks([])
+cumsumdeg = np.cumsum(G.deg)
+expected = cutlist#[cutlist[i] if cutlist[i]<cumsumdeg[i] else cumsumdeg[i] for i in range(n)]
+#print(expected)
 
-# maxtry = 10
-# for i in range(10000):
-#     prev = s.T @ D @ s - s.T @ G.A @ s
-#     cnt = G.switch_A_par(s, alg="RAND", count=1, maxtry=5)
-#     eig_values, eig_vectors = np.linalg.eig(I - D_half @ G.A @ D_half)
-#     fiedler_pos = np.where(eig_values.real == np.sort(eig_values.real)[1])[0][0]
-#     fiedler_vector = np.transpose(eig_vectors)[fiedler_pos]
-#     # print(np.sign(fiedler_vector))
-#     # print(i, G.swt_done, np.sort(eig_values.real)[1])
-#     # fiedler
-#     post = s.T @ D @ s - s.T @ G.A @ s
-#     if i % 1000 == 0:
-#         print(i, prev, post)
-#     s = np.sign(fiedler_vector)
+I = np.eye(n)
 
-# print("switch done", G.swt_done)
+v2, u2 = getLk(I - Dsqrt @ G.A @ Dsqrt, 1)
+s = np.sign(u2)
+sPos = (s > 0).astype(np.float32).reshape(-1, 1)
+sNeg = (s < 0).astype(np.float32).reshape(-1, 1)
 
-# # print(G.A)
-# print(s.T @ D @ s - s.T @ G.A @ s)
-# print(D - G.A)
+plt.figure()
+cmap = colors.ListedColormap(["tab:blue", "white", "tab:purple", "tab:red"])
+plt.subplot(2, 3, 1)
+plt.title('Before switching')
+plt.imshow(G.A + np.multiply(G.A, 2 * sPos @ sPos.T) - np.multiply(G.A, 2 * sNeg @ sNeg.T),
+    cmap=cmap)
+plt.xticks([])
+plt.yticks([])
 
-# eig_values, eig_vectors = np.linalg.eig(I - D_half @ G.A @ D_half)
-# fiedler_pos = np.where(eig_values.real == np.sort(eig_values.real)[1])[0][0]
-# fiedler_vector = np.transpose(eig_vectors)[fiedler_pos]
-# # print(np.sign(fiedler_vector))
-# # print(np.sort(eig_values.real)[1])
 
-# eig_values, eig_vectors = np.linalg.eig(D - G.A)
-# fiedler_pos = np.where(eig_values.real == np.sort(eig_values.real)[1])[0][0]
-# fiedler_vector = np.transpose(eig_vectors)[fiedler_pos]
-# print(np.sort(eig_values.real))
+l2,_ = getLk(np.diag(G.deg)-G.A,1)
+D = np.diag(G.deg)
+va1, _ = getLk(G.A, n - 1)
+vl_2, _ = getLk(D - G.A, 1)
 
-# plt.subplot(1, 2, 2)
-# plt.title("After switching")
-# plt.imshow(G.A, cmap=cmap)
-# plt.xticks([])
-# plt.yticks([])
-# plt.savefig("Switch.png")
+va1Std, _ = getLk(GStd.A, n - 1)
+vl_2Std, _ = getLk(D - GStd.A, 1)
+lambdas = np.hstack(
+    (
+        lambdas,
+        np.array(
+            [
+                [abs(va1)],
+                [abs(vl_2)],
+                [abs(va1Std)],
+                [abs(vl_2Std)]
+            ]
+        ),
+    )
+)
+
+
+#print(modularity)
+v20 = vl_2
+while True:
+    sw,M = G.switch_A_3(modularity,count = 1,alg='RAND')
+    GStd.switch_A(alg='RAND', count=1)
+    if(sw != -1):
+        break
+    va1, _ = getLk(G.A, n - 1)
+    vl_2, _ = getLk(D - G.A, 1)
+    va1Std, _ = getLk(GStd.A, n - 1)
+    vl_2Std, _ = getLk(D - GStd.A, 1)
+    lambdas = np.hstack(
+        (
+            lambdas,
+            np.array(
+                [
+                    [abs(va1)],
+                    [abs(vl_2)],
+                    [abs(va1Std)],
+                    [abs(vl_2Std)]
+                ]
+            ),
+        )
+    )
+    
+    modularity = M
+    print(max(M))
+    
+
+modularity = np.zeros(n)
+B = np.zeros((n,n))
+for i in range(n):
+    for j in range(n):
+        B[i,j] = G.A[i,j] - (G.deg[i]*G.deg[j])/(2*m)
+
+for p in range(n):
+    s = np.array([-1 if i<=p else 1 for i in range(n)])
+    modularity[p] = s.T @ B @ s
+
+print(max(modularity))
+
+#print(G.A)
+#print(cutlist)
+v2, u2 = getLk(I - Dsqrt @ G.A @ Dsqrt, 1)
+s = np.sign(u2)
+sPos = (s > 0).astype(np.float32).reshape(-1, 1)
+sNeg = (s < 0).astype(np.float32).reshape(-1, 1)
+plt.subplot(2, 3, 2)
+plt.title("After L2A switching")
+plt.imshow(G.A + np.multiply(G.A, 2 * sPos @ sPos.T) - np.multiply(G.A, 2 * sNeg @ sNeg.T),cmap=cmap,
+)
+plt.xticks([])
+plt.yticks([])
+
+v2, u2 = getLk(I - Dsqrt @ GStd.A @ Dsqrt, 1)
+s = np.sign(u2)
+sPos = (s > 0).astype(np.float32).reshape(-1, 1)
+sNeg = (s < 0).astype(np.float32).reshape(-1, 1)
+plt.subplot(2, 3, 3)
+plt.title("After Std switching")
+plt.imshow(GStd.A + np.multiply(GStd.A, 2 * sPos @ sPos.T) - np.multiply(GStd.A, 2 * sNeg @ sNeg.T),cmap=cmap,
+)
+#(GStd.A + np.multiply(GStd.A, 2 * sPos @ sPos.T) - np.multiply(GStd.A, 2 * sNeg @ sNeg.T))
+plt.xticks([])
+plt.yticks([])
+
+l2,_ = getLk(np.diag(G.deg)-G.A,1)
+#print(l2)
+
+plt.subplot(2, 1, 2)
+plt.title("Lambda")
+plt.plot((lambdas[0, :] - lambdas[0, 0]) / lambdas[0, 0], label="L2A: a1")
+plt.plot((lambdas[1, :] - lambdas[1, 0]) / lambdas[1, 0], label="L2A: l2")
+plt.plot((lambdas[2, :] - lambdas[2, 0]) / lambdas[2, 0], label="Std: a1")
+plt.plot((lambdas[3, :] - lambdas[3, 0]) / lambdas[3, 0], label="Std: l2")
+plt.legend()
+
+plt.savefig("test-"+str(n)+".pdf",dpi = 1000)

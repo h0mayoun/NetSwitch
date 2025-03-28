@@ -19,12 +19,9 @@ def getLk(M, k):
 
 
 # Initializing NetSwitch  with an ER network
-seed = 2
-random.seed(seed)
-np.random.seed(seed)
 # option
 # 1 add 2 edge to cut
-# 2 switch inside one partition
+# 2 switch inside partition
 # 3 1 switch in-parition, 1 switch between
 # 4 remove 2 edge from cut
 option = [1,3]
@@ -34,6 +31,10 @@ if graphtype == "ER":
     p = float(sys.argv[3])
 else:
     m = int(sys.argv[3])
+
+seed = int(sys.argv[4])
+random.seed(seed)
+np.random.seed(seed)
 vpar = 1
 if graphtype == "BA":
     graph = ig.Graph.Barabasi(n=n, m=m)
@@ -46,7 +47,7 @@ D = np.diag(np.diag(G.A @ G.A))
 Dsqrt = np.diag(1.0 / np.sqrt(np.diag(G.A @ G.A)))
 I = np.eye(n)
 
-v2, u2 = getLk(I - Dsqrt @ G.A @ Dsqrt, vpar)
+v2, u2 = getLk(I - Dsqrt @ G.A @ Dsqrt, 1)
 s = np.sign(u2)
 
 sPos = (s > 0).astype(np.float32).reshape(-1, 1)
@@ -86,7 +87,7 @@ lambdas = np.hstack(
 )
 
 ref2 = s @ (D - G.A) @ s / 4
-ref1 = 1
+ref1 = s @ (D - G.A) @ s / 8
 p2 = 1 + ref2
 p1 = 1/np.log(p2-ref1)    
 
@@ -102,17 +103,21 @@ while True:
     d1 = sPos.T @ D @ sPos
     d2 = sNeg.T @ D @ sNeg
     print("degree sum", min(d1, d2), "-", max(d1, d2))
-    if s @ (D - G.A) @ s / 4 > ref2:
+    if s @ (D - G.A) @ s / 4 >= ref2:
         ref2 = s @ (D - G.A) @ s / 4
+        ref1 = s @ (D - G.A) @ s / 8
         p2 = 1 + ref2
         p1 = 1/np.log(p2-ref1)    
+        temp = 1.0
     else:
         temp = 1-p1*np.log(p2-s @ (D - G.A) @ s / 4)
-    print(ite, "\t: before switch:", s @ (D - G.A) @ s / 4, "\t temp",round(temp,2), end="\t")
+    chance = random.random()
+    print(ite, "\t: before switch:", s @ (D - G.A) @ s / 4, "\t temp",round(temp,2),"\tchance ",round(chance,2), end="\t")
     ite = ite + 1
     spre = s
-    cnt = G.switch_A_par(s, option,alg='RAND',maxtry = 500,temp = temp)
-
+    chance = random.random()
+    cnt,swtype = G.switch_A_par(s, option,alg='RAND',maxtry = 5000,tempCheck = temp>=chance)
+    print("\ttype",swtype, end="\t")
     v2, u2 = getLk(I - Dsqrt @ G.A @ Dsqrt, vpar)
     s = np.sign(u2)
     print("after switch:", s @ (D - G.A) @ s / 4, "\t temp",round(temp,2), end="\t")

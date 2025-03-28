@@ -1,5 +1,6 @@
 import numpy as np
 import random
+import copy 
 
 class NetSwitch:
 
@@ -16,6 +17,8 @@ class NetSwitch:
             for l in range(self.n - kl):
                 if kl + l < self.n and kl + l >= 0:
                     self.klpair.append((min(kl + l, l), max(kl + l, l)))
+        self.Dsqrt = np.diag(1.0 / np.sqrt(self.deg))
+        self.A_n = self.Dsqrt @ self.A @ self.Dsqrt
 
     def sort_adj(self):
         sortIdx = np.argsort(-self.deg)
@@ -355,7 +358,8 @@ class NetSwitch:
                 case _:
                     raise Exception("No such switching algorithm!!!")
 
-            # i, j, k, l = swt
+            i, j, k, l = swt
+            #print(i,j,k,l)
             # print([[self.A[i, k], self.A[i, l]], [self.A[j, k], self.A[j, l]]])
             self.switch(swt, update_B=(True if alg == "BEST" else False))
             self.swt_done += 1
@@ -363,8 +367,43 @@ class NetSwitch:
             count -= 1
 
         return swt_num if self.total_checkers() == 0 else -1
+    
+    def calculate_modularity(self,modularity,swt):
+        modularity_ = copy.copy(modularity)
+        i,j,k,l = swt
+        for u in range(self.n):   
+            if (i<=u and u<j) and (k<=u and u<l) :
+                modularity_[u] += 8/sum(self.deg)
+        return modularity_
 
-    def switch_A_par(self, partition, option = [1], alg="RAND", count=-1, maxtry=10, temp = 1):
+        
+    def switch_A_3(self, modularity, count=-1,maxcnt = 1000,alg = "GRDY"):
+        """Performs a number of switchings with a specified algorithm on the adjacency matrix
+        The number of switchings to perform is input by the 'count' argument
+        count=-1 results in continous switchings until no checkerboard is left
+        alg='RAND': selects a switching checkerboard at random"""
+        swt_num = 0
+        if count == -1:
+            count = self.total_checkers()
+        itercnt = 0
+        M = np.zeros(self.n)
+        while count > 0 and self.total_checkers() > 0 and itercnt<maxcnt:
+            itercnt += 1 
+            swt = self.find_random_checker()
+            i, j, k, l = swt
+            
+            M = self.calculate_modularity(modularity,swt)
+            if max(M) <= max(modularity)*1.01:
+                self.switch(swt)
+                self.swt_done += 1
+                swt_num += 1
+                count -= 1
+                
+        if itercnt == maxcnt:
+            return -2,M
+        return swt_num if self.total_checkers() == 0 else -1,M
+
+    def switch_A_par(self, partition, option = [1], alg="RAND", count=-1, maxtry=10, tempCheck = True):
         """Performs a number of switchings with a specified algorithm on the adjacency matrix
         The number of switchings to perform is input by the 'count' argument
         count=-1 results in continous switchings until no checkerboard is left
@@ -418,7 +457,6 @@ class NetSwitch:
 
             # i, j, k, l = swt
             # print([[self.A[i, k], self.A[i, l]], [self.A[j, k], self.A[j, l]]])
-            # print(count)
             i, j, k, l = swt
             delta = (
                 partition[i] * partition[k]
@@ -432,25 +470,24 @@ class NetSwitch:
             edgeRmved = (
                 partition[i] * partition[l] + partition[j] * partition[k]
             )
-            chance = random.random()
             if edgeAdded == -2 and edgeRmved == 2 and 1 in option:
                 self.switch(swt, update_B=False)
                 self.swt_done += 1
-                return 1
-            elif edgeAdded == edgeRmved and edgeAdded != 0 and 2 in option and chance<=temp:
+                return 1,1
+            elif edgeAdded == edgeRmved and edgeAdded != 0 and 2 in option:# and tempCheck:
                 self.switch(swt, update_B=False)
                 self.swt_done += 1
-                return 1
-            elif edgeAdded == 0 and edgeRmved == 0 and 3 in option and chance<=temp:
+                return 1,2
+            elif edgeAdded == 0 and edgeRmved == 0 and 3 in option and tempCheck:
                 self.switch(swt, update_B=False)
                 self.swt_done += 1
-                return 1
-            elif edgeAdded == 2 and edgeRmved == -2 and 4 in option and chance<=temp:
+                return 1,3
+            elif edgeAdded == 2 and edgeRmved == -2 and 4 in option and tempCheck:
                 self.switch(swt, update_B=False)
                 self.swt_done += 1
-                return 1
+                return 1,4
 
-        return -1
+        return -1,-1
 
     def switch_A_par_2(self, partition, option=[1]):
         """Performs a number of switchings with a specified algorithm on the adjacency matrix
