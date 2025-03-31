@@ -7,7 +7,7 @@ from NetSwitchAlgsMod import NetSwitch
 np.set_printoptions(precision = 2,suppress = True,linewidth = np.inf)
 import csv
 import sys
-#random.seed(3)
+random.seed(1)
 def getLk(M, k):
     # get the list of eigenvalue eigenvector sorted ascendingly
     eigVal, eigVec = np.linalg.eig(M)
@@ -16,10 +16,23 @@ def getLk(M, k):
     eigVec = eigVec[:, idx]
     return eigVal[k], eigVec[:, k]
 
-n=128
-p=12/n
+def calculatmeModularity(G):    
+    modularity = np.zeros(n)
+    B = np.zeros((n,n))
+    for i in range(n):
+        for j in range(n):
+            B[i,j] = G.A[i,j] - (G.deg[i]*G.deg[j])/(2*m)
 
-graph = ig.Graph.Barabasi(n=n, m=4)
+    for p in range(n):
+        s = np.array([-1 if i<=p else 1 for i in range(n)])
+        modularity[p] = (s.T @ B @ s)/sum(G.deg)
+    return modularity
+
+n=64
+p=7/n
+
+graph = ig.Graph.Erdos_Renyi(n=n, p=p)
+#graph = ig.Graph.Barabasi(n=n, m=3)
 
 G = NetSwitch(graph)
 GStd = NetSwitch(graph)
@@ -51,11 +64,8 @@ for i in range(n):
 for p in range(n):
     s = np.array([-1 if i<=p else 1 for i in range(n)])
     modularity[p] = (s.T @ B @ s)/sum(G.deg)
-
-cumsumdeg = np.cumsum(G.deg)
-expected = cutlist#[cutlist[i] if cutlist[i]<cumsumdeg[i] else cumsumdeg[i] for i in range(n)]
-#print(expected)
-
+initial_modularity = modularity
+modularity_limit = max(modularity)
 I = np.eye(n)
 
 v2, u2 = getLk(I - Dsqrt @ G.A @ Dsqrt, 1)
@@ -63,23 +73,25 @@ s = np.sign(u2)
 sPos = (s > 0).astype(np.float32).reshape(-1, 1)
 sNeg = (s < 0).astype(np.float32).reshape(-1, 1)
 
-plt.figure()
+fig = plt.figure(figsize=(12, 6))
+
 cmap = colors.ListedColormap(["tab:blue", "white", "tab:purple", "tab:red"])
-plt.subplot(2, 3, 1)
-plt.title('Before switching')
-plt.imshow(G.A + np.multiply(G.A, 2 * sPos @ sPos.T) - np.multiply(G.A, 2 * sNeg @ sNeg.T),
-    cmap=cmap)
-plt.xticks([])
-plt.yticks([])
+
+
+# ax1 = fig.add_subplot(3, 3, 1)
+# ax1.set_title('Before switching')
+# ax1.imshow(G.A + np.multiply(G.A, 2 * sPos @ sPos.T) - np.multiply(G.A, 2 * sNeg @ sNeg.T),
+#     cmap=cmap)
+# ax1.set_xticks([])
+# ax1.set_yticks([])
 
 
 l2,_ = getLk(np.diag(G.deg)-G.A,1)
 D = np.diag(G.deg)
 va1, _ = getLk(G.A, n - 1)
-vl_2, _ = getLk(D - G.A, 1)
-
+vl_2, _ = getLk(I - Dsqrt @ G.A @Dsqrt, 1)
 va1Std, _ = getLk(GStd.A, n - 1)
-vl_2Std, _ = getLk(D - GStd.A, 1)
+vl_2Std, _ = getLk(I - Dsqrt @ GStd.A@Dsqrt, 1)
 lambdas = np.hstack(
     (
         lambdas,
@@ -97,15 +109,19 @@ lambdas = np.hstack(
 
 #print(modularity)
 v20 = vl_2
+switches = 0
 while True:
-    sw,M = G.switch_A_3(modularity,count = 1,alg='RAND')
+    print(switches,end = " ")
+    sw,M = G.switch_A_3(modularity,modularity_limit,count = 1,alg='RAND')
+    switches +=1
     GStd.switch_A(alg='RAND', count=1)
     if(sw != -1):
         break
+    
     va1, _ = getLk(G.A, n - 1)
-    vl_2, _ = getLk(D - G.A, 1)
+    vl_2, _ = getLk(I - Dsqrt @ G.A @Dsqrt, 1)
     va1Std, _ = getLk(GStd.A, n - 1)
-    vl_2Std, _ = getLk(D - GStd.A, 1)
+    vl_2Std, _ = getLk(I - Dsqrt @ GStd.A@Dsqrt, 1)
     lambdas = np.hstack(
         (
             lambdas,
@@ -124,52 +140,57 @@ while True:
     print(max(M))
     
 
-modularity = np.zeros(n)
-B = np.zeros((n,n))
-for i in range(n):
-    for j in range(n):
-        B[i,j] = G.A[i,j] - (G.deg[i]*G.deg[j])/(2*m)
-
-for p in range(n):
-    s = np.array([-1 if i<=p else 1 for i in range(n)])
-    modularity[p] = s.T @ B @ s
-
-print(max(modularity))
-
 #print(G.A)
 #print(cutlist)
 v2, u2 = getLk(I - Dsqrt @ G.A @ Dsqrt, 1)
 s = np.sign(u2)
 sPos = (s > 0).astype(np.float32).reshape(-1, 1)
 sNeg = (s < 0).astype(np.float32).reshape(-1, 1)
-plt.subplot(2, 3, 2)
-plt.title("After L2A switching")
-plt.imshow(G.A + np.multiply(G.A, 2 * sPos @ sPos.T) - np.multiply(G.A, 2 * sNeg @ sNeg.T),cmap=cmap,
+
+#####################################################################################################################
+ax2 = fig.add_subplot(2, 4, 5)
+ax2.imshow(G.A + np.multiply(G.A, 2 * sPos @ sPos.T) - np.multiply(G.A, 2 * sNeg @ sNeg.T),cmap=cmap,
 )
-plt.xticks([])
-plt.yticks([])
+ax2.set_xticks([])
+ax2.set_yticks([])
 
 v2, u2 = getLk(I - Dsqrt @ GStd.A @ Dsqrt, 1)
 s = np.sign(u2)
 sPos = (s > 0).astype(np.float32).reshape(-1, 1)
 sNeg = (s < 0).astype(np.float32).reshape(-1, 1)
-plt.subplot(2, 3, 3)
-plt.title("After Std switching")
-plt.imshow(GStd.A + np.multiply(GStd.A, 2 * sPos @ sPos.T) - np.multiply(GStd.A, 2 * sNeg @ sNeg.T),cmap=cmap,
+
+ax3 = fig.add_subplot(2, 4, 6)
+ax3.imshow(GStd.A + np.multiply(GStd.A, 2 * sPos @ sPos.T) - np.multiply(GStd.A, 2 * sNeg @ sNeg.T),cmap=cmap,
 )
-#(GStd.A + np.multiply(GStd.A, 2 * sPos @ sPos.T) - np.multiply(GStd.A, 2 * sNeg @ sNeg.T))
-plt.xticks([])
-plt.yticks([])
+ax3.set_xticks([])
+ax3.set_yticks([])
 
-l2,_ = getLk(np.diag(G.deg)-G.A,1)
-#print(l2)
+#####################################################################################################################
+ax4 = fig.add_subplot(2, 2, 1)
+ax4.plot([0,switches],[0,0], label="",color = 'k',linestyle = ':',linewidth = 0.1)
+ax4.plot((lambdas[0, :] - lambdas[0, 0]) / lambdas[0, 0], label="L2A: a1",color = 'tab:orange')
+ax4.plot((lambdas[1, :] - lambdas[1, 0]) / lambdas[1, 0], label="L2A: l2",color = 'tab:orange',linestyle = ':')
+ax4.plot((lambdas[2, :] - lambdas[2, 0]) / lambdas[2, 0], label="Std: a1",color = 'tab:cyan')
+ax4.plot((lambdas[3, :] - lambdas[3, 0]) / lambdas[3, 0], label="Std: l2",color = 'tab:cyan',linestyle = ':')
+#ax4.legend(frameon = False,loc='upper center', bbox_to_anchor=(0.5, 1.2),ncol=4)
+ax4.set_xlim([0,switches])
 
-plt.subplot(2, 1, 2)
-plt.title("Lambda")
-plt.plot((lambdas[0, :] - lambdas[0, 0]) / lambdas[0, 0], label="L2A: a1")
-plt.plot((lambdas[1, :] - lambdas[1, 0]) / lambdas[1, 0], label="L2A: l2")
-plt.plot((lambdas[2, :] - lambdas[2, 0]) / lambdas[2, 0], label="Std: a1")
-plt.plot((lambdas[3, :] - lambdas[3, 0]) / lambdas[3, 0], label="Std: l2")
-plt.legend()
+ax5 = fig.add_subplot(2, 4, 7)
+ig.plot(ig.Graph.Adjacency(G.A), vertex_size=np.log(G.deg)*(5/np.log(G.deg)[0]),edge_width = 0.5/n, edge_arrow_size = 0,edge_arrow_width=0,target=ax5)
+ax6 = fig.add_subplot(2, 4, 8)
+ig.plot(ig.Graph.Adjacency(GStd.A), vertex_size=np.log(GStd.deg)*(5/np.log(GStd.deg)[0]),edge_width = 0.5/n, edge_arrow_size = 0,edge_arrow_width=0, target=ax6)
+
+# ax7 = fig.add_subplot(2, 4, 5)
+# ax7.plot(calculatmeModularity(G),color = 'tab:orange')
+# ax7.plot(initial_modularity,color = 'k')
+# ax8 = fig.add_subplot(2, 4, 6)
+# ax8.plot(calculatmeModularity(GStd),color = 'tab:cyan')
+# ax8.plot(initial_modularity,color = 'k')
+
+ax7 = fig.add_subplot(2, 2, 2)
+ax7.plot(calculatmeModularity(G),color = 'tab:orange')
+ax7.plot(initial_modularity,color = 'k')
+ax7.plot(calculatmeModularity(GStd),color = 'tab:cyan')
+ax7.set_xlim([0,n])
 
 plt.savefig("test-"+str(n)+".pdf",dpi = 1000)

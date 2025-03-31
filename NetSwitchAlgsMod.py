@@ -376,8 +376,8 @@ class NetSwitch:
                 modularity_[u] += 8/sum(self.deg)
         return modularity_
 
-        
-    def switch_A_3(self, modularity, count=-1,maxcnt = 1000,alg = "GRDY"):
+     
+    def switch_A_3(self, modularity,modularity_limit, count=-1,maxcnt = 1000,alg = "GRDY"):
         """Performs a number of switchings with a specified algorithm on the adjacency matrix
         The number of switchings to perform is input by the 'count' argument
         count=-1 results in continous switchings until no checkerboard is left
@@ -393,7 +393,7 @@ class NetSwitch:
             i, j, k, l = swt
             
             M = self.calculate_modularity(modularity,swt)
-            if max(M) <= max(modularity)*1.01:
+            if max(M) <= modularity_limit:
                 self.switch(swt)
                 self.swt_done += 1
                 swt_num += 1
