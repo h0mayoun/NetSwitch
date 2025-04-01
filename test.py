@@ -124,12 +124,11 @@ lambdas = np.hstack(
 checkerboardArea = np.zeros(0)
 v20 = vl_2
 switches = 0
-cnt = 0
-while cnt<500:
-    cnt+=1
-    print(switches,end = " ")
+plotinterval = 120
+while True:
+    print(switches)
     swt,M = G.modularityAwareSwitch(modularity,modularity_limit)
-    print(swt)
+    #print(swt)
     switches +=1
     GStd.switch_A(alg='RAND', count=1)
     if(swt == (-1,-1,-1,-1)):
@@ -161,7 +160,7 @@ while cnt<500:
             
     i,j,k,l = swt
     swtUpCnt = int(i>k) + int(j>k) + int(i>l) +int(j>l) 
-    print(swtUpCnt,j-i,l-k)
+    #print(swtUpCnt,j-i,l-k)
     checkerboardArea = np.append(checkerboardArea,(j-i)*(l-k))
     swtUpCntOH = np.zeros((5,1))
     swtUpCntOH[swtUpCnt] = 1
@@ -170,7 +169,17 @@ while cnt<500:
             swtUpCntSeries,swtUpCntOH)
     )
     modularity = M
-    print(max(M))
+    if(switches>1 and switches % plotinterval == 0):
+        v2, u2 = getLk(I - Dsqrt @ G.A @ Dsqrt, 1)
+        s = np.sign(u2)
+        sPos = (s > 0).astype(np.float32).reshape(-1, 1)
+        sNeg = (s < 0).astype(np.float32).reshape(-1, 1)
+        print(8+int(switches/plotinterval))
+        ax2 = fig.add_subplot(3, 4, 8+int(switches/plotinterval))
+        ax2.imshow(G.A + np.multiply(G.A, 2 * sPos @ sPos.T) - np.multiply(G.A, 2 * sNeg @ sNeg.T),cmap=cmap,
+        )
+        ax2.set_xticks([])
+        ax2.set_yticks([])
     
 print(np.cumsum(swtUpCntSeries,axis = 1)[:,-1])
 #print(G.A)
@@ -235,9 +244,9 @@ ax7.plot(initial_modularity,color = 'k')
 ax7.plot(calOrdParMod(GStd),color = 'tab:cyan')
 ax7.set_xlim([0,n])
 
-ax8 = fig.add_subplot(3, 2, 5)
-swNum = len(checkerboardArea)
-window = int(swNum/100)
-checkerboardAreaM = [max(checkerboardArea[i:i+window]) for i in range(swNum-window)]
-ax8.plot(checkerboardAreaM)
+# ax8 = fig.add_subplot(3, 2, 5)
+# swNum = len(checkerboardArea)
+# window = int(swNum/100)
+# checkerboardAreaM = [max(checkerboardArea[i:i+window]) for i in range(swNum-window)]
+# ax8.plot(checkerboardAreaM)
 plt.savefig("test-"+str(n)+".pdf",dpi = 1000)
