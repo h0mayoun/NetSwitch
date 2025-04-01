@@ -377,31 +377,29 @@ class NetSwitch:
         return modularity_
 
      
-    def switch_A_3(self, modularity,modularity_limit, count=-1,maxcnt = 1000,alg = "GRDY"):
-        """Performs a number of switchings with a specified algorithm on the adjacency matrix
-        The number of switchings to perform is input by the 'count' argument
-        count=-1 results in continous switchings until no checkerboard is left
-        alg='RAND': selects a switching checkerboard at random"""
+    def modularityAwareSwitch(self, modularity,modularity_limit,maxcnt = 10000):
+        """Performs a random positive switch that does not increase 
+        the modulatity of all n sorted partition cut over the modularity_limit
+        """
         swt_num = 0
-        if count == -1:
-            count = self.total_checkers()
         itercnt = 0
         M = np.zeros(self.n)
-        while count > 0 and self.total_checkers() > 0 and itercnt<maxcnt:
+        done = False
+        while not done and self.total_checkers() > 0 and itercnt<maxcnt:
             itercnt += 1 
             swt = self.find_random_checker()
             i, j, k, l = swt
-            
+            #if k>j:
+            #    continue
             M = self.calculate_modularity(modularity,swt)
             if max(M) <= modularity_limit:
                 self.switch(swt)
                 self.swt_done += 1
-                swt_num += 1
-                count -= 1
+                done = True
                 
         if itercnt == maxcnt:
-            return -2,M
-        return swt_num if self.total_checkers() == 0 else -1,M
+            return (-1,-1,-1,-1),M
+        return (i.item(),j.item(),k.item(),l.item()),M
 
     def switch_A_par(self, partition, option = [1], alg="RAND", count=-1, maxtry=10, tempCheck = True):
         """Performs a number of switchings with a specified algorithm on the adjacency matrix
