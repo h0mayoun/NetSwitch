@@ -367,7 +367,7 @@ class NetSwitch:
                 newModularity[u] = modularity[u] + 8/sum(self.deg)
         return newModularity
      
-    def modAwareSwitch(self, modularity,modularity_limit,maxcnt = 10000):
+    def modAwareSwitch(self, modularity,modularity_limit,maxcnt = 100000):
         """Performs a random positive switch that does not increase 
         the modulatity of all n sorted partition cut over the modularity_limit
         """
@@ -379,8 +379,8 @@ class NetSwitch:
             itercnt += 1 
             swt = self.find_random_checker()
             i, j, k, l = swt
-            #if k>j:
-            #    continue
+            if k-j <= self.n /np.log2(self.n)/self.n or j-i <=self.n/ np.log2(self.n):
+                continue
             M = self.calOrdParMod(modularity,swt)
             if max(M) <= modularity_limit:
                 self.switch(swt)

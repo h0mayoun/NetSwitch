@@ -7,7 +7,9 @@ from NetSwitchAlgsMod import NetSwitch
 import csv
 import sys
 import matplotlib.animation as animation
-random.seed(1)
+import os 
+seed = 1
+random.seed(seed)
 np.set_printoptions(precision = 2,suppress = True,linewidth = np.inf)
 
 def getLk(M, k):
@@ -40,9 +42,12 @@ def calModMatrix(G):
 
 n=64
 p=7/n
-
-graph = ig.Graph.Erdos_Renyi(n=n, p=p)
-#graph = ig.Graph.Barabasi(n=n, m=3)
+kn = 4
+graphtype = "ER"
+if graphtype == "ER":
+    graph = ig.Graph.Erdos_Renyi(n=n, p=p)
+elif graphtype == "BA":
+    graph = ig.Graph.Barabasi(n=n, m=kn)
 
 G = NetSwitch(graph)
 
@@ -52,9 +57,9 @@ m = sum(G.deg)/2
 
 modularity = np.zeros(n)
 M = G.M
-for p in range(n):
-    s = np.array([-1 if i<=p else 1 for i in range(n)])
-    modularity[p] = (s.T @ M @ s)/sum(G.deg)
+for k in range(n):
+    s = np.array([-1 if i<=k else 1 for i in range(n)])
+    modularity[k] = (s.T @ M @ s)/sum(G.deg)
 modularity_limit = max(modularity)
 
 I = np.eye(n)
@@ -84,6 +89,11 @@ ims = []
 ax1 = fig.add_subplot(2, 1, 1)
 ax2 = fig.add_subplot(2, 2, 3)
 ax3 = fig.add_subplot(2, 2, 4)
+if graphtype == "ER":
+    st = fig.suptitle("ER; n="+str(n)+"; p="+str(round(p,2)) +"; seed ="+str(seed), fontsize="x-large")
+elif graphtype == "BA":
+    st = fig.suptitle("BA; n="+str(n)+"; m="+str(kn) +"; seed ="+str(seed), fontsize="x-large")
+#st = fig.suptitle("ER; n="+str(n)+"; p="+str(round(p,2)) +"; seed ="+str(seed), fontsize="x-large")
 while True:
     print(switches)
     switches+=1
@@ -99,8 +109,15 @@ while True:
     s = s*s[0]
     sPos = (s > 0).astype(np.float32).reshape(-1, 1)
     sNeg = (s < 0).astype(np.float32).reshape(-1, 1)
-    im2 = ax2.imshow(G.A + np.multiply(G.A, 2 * sPos @ sPos.T) - np.multiply(G.A, 2 * sNeg @ sNeg.T),cmap=cmap,
-    )
+    img = G.A + np.multiply(G.A, 2 * sPos @ sPos.T) - np.multiply(G.A, 2 * sNeg @ sNeg.T)
+    _ = np.zeros((n,1))
+    _[0] = -1
+    _[1] = 0
+    _[2] = 1
+    _[3] = 3
+    img = np.hstack((img,_))
+    im2 = ax2.imshow(img,cmap=cmap)
+    ax2.set_xlim([0,n])
     ax2.set_xticks([])
     ax2.set_yticks([])
 
@@ -121,10 +138,11 @@ while True:
     )
     color = ["red" if i>0 else "blue" for i in s]
     Gig = ig.Graph.Adjacency(G.A)
-    edgecolor = ["black" if s[i]!=s[j] else "gainsboro" for (i,j) in Gig.get_edgelist()]
+    #edgecolor = ["black" if s[i]!=s[j] else "gainsboro" for (i,j) in Gig.get_edgelist()]
+    edgewidth = [np.log(n)/5 if s[i]!=s[j] else 0 for (i,j) in Gig.get_edgelist()]
     im3 = ig.plot(ig.Graph.Adjacency(G.A), vertex_size=np.log(G.deg)*(50/np.log(G.deg)[0]),
-            edge_width = np.log(n)/5, edge_arrow_size = 0,edge_arrow_width=0,layout="circle",
-            target=ax3,vertex_color = color,edge_color = edgecolor,vertex_frame_width=0)
+            edge_width = edgewidth, edge_arrow_size = 0,edge_arrow_width=0,layout="circle",
+            target=ax3,vertex_color = color,edge_color = "black",vertex_frame_width=0)
 
 
     im11, = ax1.plot([-1e9,1e9],[0,0], label="",color = 'k',linestyle = ':',linewidth = 0.1)
@@ -146,4 +164,6 @@ while True:
     
 ani = animation.ArtistAnimation(fig, ims, interval=50, blit=True,
                                 repeat=False)
-ani.save("switch.gif",dpi = 300)
+FFwriter = animation.FFMpegWriter(fps=10)
+num = len(os.listdir("animation"))
+ani.save("animation/"+"switch"+str(num+1)+".mp4",dpi = 300,writer=FFwriter)
