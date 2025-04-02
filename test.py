@@ -8,6 +8,7 @@ np.set_printoptions(precision = 2,suppress = True,linewidth = np.inf)
 import csv
 import sys
 random.seed(1)
+
 def getLk(M, k):
     # get the list of eigenvalue eigenvector sorted ascendingly
     eigVal, eigVec = np.linalg.eig(M)

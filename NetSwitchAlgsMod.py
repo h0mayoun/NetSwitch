@@ -12,13 +12,11 @@ class NetSwitch:
         self.countonce = True
         self.checkercount_matrix()
         self.swt_done = 0
-        self.klpair = []
-        for kl in reversed(range(1, self.n)):
-            for l in range(self.n - kl):
-                if kl + l < self.n and kl + l >= 0:
-                    self.klpair.append((min(kl + l, l), max(kl + l, l)))
-        self.Dsqrt = np.diag(1.0 / np.sqrt(self.deg))
-        self.A_n = self.Dsqrt @ self.A @ self.Dsqrt
+        self.M = np.zeros((self.n,self.n))
+        self.m = np.sum(self.deg)/2
+        for i in range(self.n):
+            for j in range(self.n):
+                self.M[i,j] = self.A[i,j] - (self.deg[i]*self.deg[j])/(2*self.m)
 
     def sort_adj(self):
         sortIdx = np.argsort(-self.deg)
@@ -124,26 +122,6 @@ class NetSwitch:
                 )
                 self.Nrow[ref_row] = np.sum(self.N[ref_row, :])
 
-    def update_B(self, swt):
-        """Given a checkerboard (i, j, k, l) is switched,
-        updates the array B that holds size of row-pair checkerboards in matrix A"""
-
-        i, j, k, l = swt
-        for ref_row in [i, j, k, l]:
-            for row in range(ref_row):
-                diag_idx = self.coord2diag(row, ref_row)
-                if self.N[row, ref_row] == 0:
-                    self.B[diag_idx] = -1
-                elif self.B[diag_idx] != 0:
-                    lft, rgt = self.largest_kl(row, ref_row)
-                    self.B[diag_idx] = (ref_row - row) * (rgt - lft)
-            for row in range(ref_row + 1, self.n):
-                diag_idx = self.coord2diag(ref_row, row)
-                if self.N[ref_row, row] == 0:
-                    self.B[diag_idx] = -1
-                elif self.B[diag_idx] != 0:
-                    lft, rgt = self.largest_kl(ref_row, row)
-                    self.B[diag_idx] = (row - ref_row) * (rgt - lft)
 
     def total_checkers(self):
         """Returns the total number of checkerboards left in the adjacency matrix"""
@@ -158,13 +136,25 @@ class NetSwitch:
             1 - self.A[i, k],
             1 - self.A[i, l],
             1 - self.A[j, k],
-            1 - self.A[j, l],
+            1 - self.A[j, l]
         )
         self.A[k, i], self.A[l, i], self.A[k, j], self.A[l, j] = (
             1 - self.A[k, i],
             1 - self.A[l, i],
             1 - self.A[k, j],
-            1 - self.A[l, j],
+            1 - self.A[l, j]
+        )
+        self.M[i, k], self.M[i, l], self.M[j, k], self.M[j, l] = (
+            self.M[i, k]+1,
+            self.M[i, l]-1,
+            self.M[j, k]-1,
+            self.M[j, l]+1
+        )
+        self.M[k, i], self.M[l, i], self.M[k, j], self.M[l, j] = (
+            self.M[k, i]+1,
+            self.M[l, i]-1,
+            self.M[k, j]-1,
+            self.M[l, j]+1
         )
         self.update_N(swt)
         if update_B:
@@ -368,16 +358,16 @@ class NetSwitch:
 
         return swt_num if self.total_checkers() == 0 else -1
     
-    def calculate_modularity(self,modularity,swt):
-        modularity_ = copy.copy(modularity)
+    def calOrdParMod(self,modularity,swt):
+        newModularity = np.zeros(len(modularity))
         i,j,k,l = swt
         for u in range(self.n):   
+            newModularity[u] = modularity[u] 
             if (i<=u and u<j) and (k<=u and u<l) :
-                modularity_[u] += 8/sum(self.deg)
-        return modularity_
-
+                newModularity[u] = modularity[u] + 8/sum(self.deg)
+        return newModularity
      
-    def modularityAwareSwitch(self, modularity,modularity_limit,maxcnt = 10000):
+    def modAwareSwitch(self, modularity,modularity_limit,maxcnt = 10000):
         """Performs a random positive switch that does not increase 
         the modulatity of all n sorted partition cut over the modularity_limit
         """
@@ -391,7 +381,7 @@ class NetSwitch:
             i, j, k, l = swt
             #if k>j:
             #    continue
-            M = self.calculate_modularity(modularity,swt)
+            M = self.calOrdParMod(modularity,swt)
             if max(M) <= modularity_limit:
                 self.switch(swt)
                 self.swt_done += 1
@@ -400,145 +390,6 @@ class NetSwitch:
         if itercnt == maxcnt:
             return (-1,-1,-1,-1),M
         return (i.item(),j.item(),k.item(),l.item()),M
-
-    def switch_A_par(self, partition, option = [1], alg="RAND", count=-1, maxtry=10, tempCheck = True):
-        """Performs a number of switchings with a specified algorithm on the adjacency matrix
-        The number of switchings to perform is input by the 'count' argument
-        count=-1 results in continous switchings until no checkerboard is left
-        alg='RAND': selects a switching checkerboard at random"""
-        swt_num = 0
-        tries = 0
-        if count == -1:
-            count = self.total_checkers()
-        while count > 0 and self.total_checkers() > 0 and tries <= maxtry:
-            tries += 1
-            match alg:
-                case "RAND":
-                    swt = self.find_random_checker()
-                case "ORDR":
-                    if self.swt_done == 0:
-                        self.i, self.j = 0, self.n - 1
-                    swt = self.next_ij_rowrow()
-                case "ORDD":
-                    if self.swt_done == 0:
-                        self.i, self.j = 0, self.n - 1
-                    swt = self.next_ij_diag()
-                case "BEST":
-                    if self.swt_done == 0:
-                        self.B = np.zeros(int(self.n * (self.n - 1) / 2))
-                    swt = self.next_best_swt()
-                case "GRDY":
-                    swt = self.find_random_checker()
-                    i, j, k, l = swt
-                    search_block = 0
-                    while True:
-                        new_k, new_l = self.largest_kl(i, j)
-                        if new_k == k and new_l == l:
-                            search_block += 1
-                            if search_block == 2:
-                                break
-                        else:
-                            k, l = new_k, new_l
-                            search_block = 0
-                        new_i, new_j = self.largest_ij(k, l)
-                        if new_i == i and new_j == j:
-                            search_block += 1
-                            if search_block == 2:
-                                break
-                        else:
-                            i, j = new_i, new_j
-                            search_block = 0
-                    # print(swt, i, j, k, l)
-                    swt = i, j, k, l
-                case _:
-                    raise Exception("No such switching algorithm!!!")
-
-            # i, j, k, l = swt
-            # print([[self.A[i, k], self.A[i, l]], [self.A[j, k], self.A[j, l]]])
-            i, j, k, l = swt
-            delta = (
-                partition[i] * partition[k]
-                + partition[j] * partition[l]
-                - partition[i] * partition[l]
-                - partition[j] * partition[k]
-            )
-            edgeAdded = (
-                            partition[i] * partition[k] + partition[j] * partition[l]
-                        )
-            edgeRmved = (
-                partition[i] * partition[l] + partition[j] * partition[k]
-            )
-            if edgeAdded == -2 and edgeRmved == 2 and 1 in option:
-                self.switch(swt, update_B=False)
-                self.swt_done += 1
-                return 1,1
-            elif edgeAdded == edgeRmved and edgeAdded != 0 and 2 in option:# and tempCheck:
-                self.switch(swt, update_B=False)
-                self.swt_done += 1
-                return 1,2
-            elif edgeAdded == 0 and edgeRmved == 0 and 3 in option and tempCheck:
-                self.switch(swt, update_B=False)
-                self.swt_done += 1
-                return 1,3
-            elif edgeAdded == 2 and edgeRmved == -2 and 4 in option and tempCheck:
-                self.switch(swt, update_B=False)
-                self.swt_done += 1
-                return 1,4
-
-        return -1,-1
-
-    def switch_A_par_2(self, partition, option=[1]):
-        """Performs a number of switchings with a specified algorithm on the adjacency matrix
-        The number of switchings to perform is input by the 'count' argument
-        count=-1 results in continous switchings until no checkerboard is left
-        alg='RAND': selects a switching checkerboard at random"""
-
-        # return (self.i, self.j, ord_k, ord_l)
-
-        i, j = 0, self.n - 1
-        while i < self.n - 1:
-            # print(i, j)
-            if self.N[i, j] != 0:
-                for k, l in self.klpair:
-                    if k == i or k == j or l == i or l == j:
-                        continue
-                    if (
-                        self.A[i, k] == 0
-                        and self.A[j, k] == 1
-                        and self.A[i, l] == 1
-                        and self.A[j, l] == 0
-                    ):
-                        swt = (i, j, k, l)
-                        edgeAdded = (
-                            partition[i] * partition[k] + partition[j] * partition[l]
-                        )
-                        edgeRmved = (
-                            partition[i] * partition[l] + partition[j] * partition[k]
-                        )
-
-                        if edgeAdded == -2 and edgeRmved == 2 and 1 in option:
-                            self.switch(swt, update_B=False)
-                            self.swt_done += 1
-                            return 1
-                        elif edgeAdded == edgeRmved and edgeAdded != 0 and 2 in option:
-                            self.switch(swt, update_B=False)
-                            self.swt_done += 1
-                            return 1
-                        elif edgeAdded == 0 and edgeRmved == 0 and 3 in option:
-                            self.switch(swt, update_B=False)
-                            self.swt_done += 1
-                            return 1
-                        elif edgeAdded == 2 and edgeRmved == -2 and 4 in option:
-                            self.switch(swt, update_B=False)
-                            self.swt_done += 1
-                            return 1
-
-            j -= 1
-            if j == i:
-                i += 1
-                j = self.n - 1
-                if i == self.n - 1:
-                    return -1
 
     def XBS(self, pos_p=0.5, count=1):
         if pos_p == 1.0 and self.swt_done == 0:
