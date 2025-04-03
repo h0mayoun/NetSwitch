@@ -1,7 +1,7 @@
 import numpy as np
 import random
 import copy 
-
+from scipy.stats import ortho_group
 class NetSwitch:
 
     def __init__(self, G):
@@ -17,6 +17,17 @@ class NetSwitch:
         for i in range(self.n):
             for j in range(self.n):
                 self.M[i,j] = self.A[i,j] - (self.deg[i]*self.deg[j])/(2*self.m)
+                
+        self.orthBase = ortho_group.rvs(self.n)
+        self.orthBaseMod = np.zeros(self.n)
+        for u in range(self.n):
+            s = self.orthBase[:,u]
+            self.orthBaseMod[u] = (s.T @ self.M @ s)/sum(self.deg)
+            
+        self.ordParMod = np.zeros(self.n)
+        for u in range(self.n):
+            s = np.array([-1 if i<=u else 1 for i in range(self.n)])
+            self.ordParMod[u] = (s.T @ self.M @ s)/sum(self.deg)
 
     def sort_adj(self):
         sortIdx = np.argsort(-self.deg)
@@ -156,6 +167,15 @@ class NetSwitch:
             self.M[k, j]-1,
             self.M[l, j]+1
         )
+        
+        for u in range(self.n):
+            if (i<=u and u<j) and (k<=u and u<l) :
+                self.ordParMod[u] = self.ordParMod[u] + 8/sum(self.deg)
+            
+        for u in range(self.n):
+            s = self.orthBase[:,u]
+            self.orthBaseMod[u] = self.orthBaseMod[u] + (s[i]-s[j])*(s[k]-s[l])*2/sum(self.deg)
+            
         self.update_N(swt)
         if update_B:
             self.update_B(swt)
@@ -358,38 +378,69 @@ class NetSwitch:
 
         return swt_num if self.total_checkers() == 0 else -1
     
-    def calOrdParMod(self,modularity,swt):
-        newModularity = np.zeros(len(modularity))
+    def checkOrthBaseMod(self,modularity_limit,swt):
         i,j,k,l = swt
         for u in range(self.n):   
-            newModularity[u] = modularity[u] 
-            if (i<=u and u<j) and (k<=u and u<l) :
-                newModularity[u] = modularity[u] + 8/sum(self.deg)
-        return newModularity
+            s = self.orthBase[:,u]
+            if self.orthBaseMod[u] + (s[i]-s[j])*(s[k]-s[l])*2/sum(self.deg) > modularity_limit:
+                return False
+        return True
+    
+    def checkOrdParMod(self,modularity_limit,swt):
+        i,j,k,l = swt
+        for u in range(self.n):   
+            if (i<=u and u<j) and (k<=u and u<l) and self.ordParMod[u] + 8/sum(self.deg) > modularity_limit:
+                return False
+        return True
      
-    def modAwareSwitch(self, modularity,modularity_limit,maxcnt = 100000):
+    def modAwareSwitch(self,modularity_limit,small_switch_limit=-1,maxcnt = 10000):
         """Performs a random positive switch that does not increase 
         the modulatity of all n sorted partition cut over the modularity_limit
         """
+        if small_switch_limit == -1:
+            small_switch_limit = 0
         swt_num = 0
         itercnt = 0
-        M = np.zeros(self.n)
         done = False
         while not done and self.total_checkers() > 0 and itercnt<maxcnt:
             itercnt += 1 
             swt = self.find_random_checker()
             i, j, k, l = swt
-            if k-j <= self.n /np.log2(self.n)/self.n or j-i <=self.n/ np.log2(self.n):
+            
+            if l-k <= small_switch_limit or j-i <= small_switch_limit:
                 continue
-            M = self.calOrdParMod(modularity,swt)
-            if max(M) <= modularity_limit:
+            if self.checkOrdParMod(modularity_limit,swt):#max(M) <= modularity_limit:
                 self.switch(swt)
                 self.swt_done += 1
                 done = True
                 
         if itercnt == maxcnt:
-            return (-1,-1,-1,-1),M
-        return (i.item(),j.item(),k.item(),l.item()),M
+            return (-1,-1,-1,-1)
+        return (i.item(),j.item(),k.item(),l.item())
+    
+    def modAwareSwitchOrth(self,modularity_limit,small_switch_limit=-1,maxcnt = 10000):
+        """Performs a random positive switch that does not increase 
+        the modulatity of all n sorted partition cut over the modularity_limit
+        """
+        if small_switch_limit == -1:
+            small_switch_limit = self.n
+        swt_num = 0
+        itercnt = 0
+        done = False
+        while not done and self.total_checkers() > 0 and itercnt<maxcnt:
+            itercnt += 1 
+            swt = self.find_random_checker()
+            i, j, k, l = swt
+            
+            if l-k <= small_switch_limit or j-i <= small_switch_limit:
+                continue
+            if self.checkOrthBaseMod(modularity_limit,swt):#max(M) <= modularity_limit:
+                self.switch(swt)
+                self.swt_done += 1
+                done = True
+        if itercnt == maxcnt:
+            return (-1,-1,-1,-1)
+        return (i.item(),j.item(),k.item(),l.item())
 
     def XBS(self, pos_p=0.5, count=1):
         if pos_p == 1.0 and self.swt_done == 0:
