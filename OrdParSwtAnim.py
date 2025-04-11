@@ -1,5 +1,6 @@
 import random
 import numpy as np
+import scipy as sp
 import igraph as ig
 import matplotlib.pyplot as plt
 from matplotlib import colors
@@ -15,6 +16,7 @@ np.set_printoptions(precision = 2,suppress = True,linewidth = np.inf)
 def getLk(M, k):
     # get the list of eigenvalue eigenvector sorted ascendingly
     eigVal, eigVec = np.linalg.eig(M)
+    #eigval, eigvec = sp.sparse.linalg.eigsh(M,k=2,which = "LM")
     idx = eigVal.argsort()
     eigVal = eigVal[idx]
     eigVec = eigVec[:, idx]
@@ -22,8 +24,8 @@ def getLk(M, k):
 
 
 n=256
-p=10/n
-kn = 4
+p=np.log(n)*1.3/n
+kn = 3
 graphtype = "ER"
 if graphtype == "ER":
     graph = ig.Graph.Erdos_Renyi(n=n, p=p)
@@ -36,21 +38,18 @@ Dsqrt = np.diag(1.0 / np.sqrt(G.deg))
 A_n = Dsqrt @ G.A @ Dsqrt
 m = sum(G.deg)/2
 
-modularity = np.zeros(n)
-M = G.M
-for k in range(n):
-    s = np.array([-1 if i<=k else 1 for i in range(n)])
-    modularity[k] = (s.T @ M @ s)/sum(G.deg)
-modularity_limit = max(modularity)
 
+#modularity_limit = max(G.orthBaseMod)
+modularity_limit = max(G.ordParMod)
 I = np.eye(n)
 fig = plt.figure(figsize=(9, 9))
 cmap = colors.ListedColormap(["tab:blue", "white", "tab:purple", "tab:red"])
 
 lambdas = np.zeros((3, 0))
 va1, _ = getLk(G.A, n - 1)
-vl2, ul2 = getLk(I - Dsqrt @ G.A @Dsqrt, 1)
-mod = np.sign(ul2).T@G.M@np.sign(ul2)
+#vl2, ul2 = getLk(I - Dsqrt @ G.A @Dsqrt, 1)
+vl2, ul2 = getLk(Dsqrt @ G.M @ Dsqrt, n-2)
+cut = np.sign(ul2).T@G.A@np.sign(ul2)
 
 lambdas = np.hstack(
     (
@@ -59,7 +58,7 @@ lambdas = np.hstack(
             [
                 [va1],
                 [vl2],
-                [mod]
+                [cut]
             ]
         ),
     )
@@ -76,16 +75,16 @@ elif graphtype == "BA":
     st = fig.suptitle("BA; n="+str(n)+"; m="+str(kn) +"; seed ="+str(seed), fontsize="x-large")
 #st = fig.suptitle("ER; n="+str(n)+"; p="+str(round(p,2)) +"; seed ="+str(seed), fontsize="x-large")
 while True:
-    print(switches)
     switches+=1
     
-    swt,M = G.modAwareSwitch(modularity,modularity_limit)
+    swt = G.modAwareSwitch(modularity_limit,small_switch_limit=0,relaxed=True)
     if(swt == (-1,-1,-1,-1)):
         break
-    modularity = M
     
     
-    v2, u2 = getLk(I - Dsqrt @ G.A @ Dsqrt, 1)
+    #v2, u2 = getLk(I - Dsqrt @ G.A @ Dsqrt, 1)
+    
+    v2, u2 = getLk(Dsqrt @ G.M @ Dsqrt, n-2)
     s = np.sign(u2)
     s = s*s[0]
     sPos = (s > 0).astype(np.float32).reshape(-1, 1)
@@ -98,12 +97,12 @@ while True:
     _[3] = 3
     img = np.hstack((img,_))
     im2 = ax2.imshow(img,cmap=cmap)
-    ax2.set_xlim([0,n])
+    ax2.set_xlim([-0.5,n-0.5])
     ax2.set_xticks([])
     ax2.set_yticks([])
 
     va1, _ = getLk(G.A, n - 1)
-    mod = np.sign(u2).T@G.M@np.sign(u2)
+    cut = s.T@G.A@s
 
     lambdas = np.hstack(
         (
@@ -112,11 +111,12 @@ while True:
                 [
                     [va1],
                     [v2],
-                    [mod]
+                    [cut]
                 ]
             ),
         )
     )
+    print(switches, cut)
     color = ["red" if i>0 else "blue" for i in s]
     Gig = ig.Graph.Adjacency(G.A)
     #edgecolor = ["black" if s[i]!=s[j] else "gainsboro" for (i,j) in Gig.get_edgelist()]

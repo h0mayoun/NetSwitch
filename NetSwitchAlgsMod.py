@@ -14,15 +14,20 @@ class NetSwitch:
         self.swt_done = 0
         self.M = np.zeros((self.n,self.n))
         self.m = np.sum(self.deg)/2
+        self.Dsqrt = np.diag(1.0 / np.sqrt(self.deg))
+        
         for i in range(self.n):
             for j in range(self.n):
                 self.M[i,j] = self.A[i,j] - (self.deg[i]*self.deg[j])/(2*self.m)
-                
-        self.orthBase = ortho_group.rvs(self.n)
+            
+        self.orthBase = np.zeros((self.n,self.n))
+        for u in range(self.n):
+            s = np.array([-1/np.sqrt(self.n) if i<=u else 1/np.sqrt(self.n) for i in range(self.n)])
+            self.orthBase[:,u] = s
+            
         self.orthBaseMod = np.zeros(self.n)
         for u in range(self.n):
-            s = self.orthBase[:,u]
-            self.orthBaseMod[u] = (s.T @ self.M @ s)/sum(self.deg)
+            self.orthBaseMod[u] = (self.orthBase[:,u].T @ self.Dsqrt @ self.M @self.Dsqrt @ self.orthBase[:,u])
             
         self.ordParMod = np.zeros(self.n)
         for u in range(self.n):
@@ -173,8 +178,8 @@ class NetSwitch:
                 self.ordParMod[u] = self.ordParMod[u] + 8/sum(self.deg)
             
         for u in range(self.n):
-            s = self.orthBase[:,u]
-            self.orthBaseMod[u] = self.orthBaseMod[u] + (s[i]-s[j])*(s[k]-s[l])*2/sum(self.deg)
+            self.orthBaseMod[u] = self.orthBaseMod[u] + (self.orthBase[i,u]/np.sqrt(self.deg[i])-self.orthBase[j,u]/np.sqrt(self.deg[j])) \
+                                                      * (self.orthBase[k,u]/np.sqrt(self.deg[k])-self.orthBase[l,u]/np.sqrt(self.deg[l]))*2#(self.orthBase[:,u].T @ self.Dsqrt @ self.M @self.Dsqrt @ self.orthBase[:,u])/sum(self.deg)
             
         self.update_N(swt)
         if update_B:
@@ -378,67 +383,41 @@ class NetSwitch:
 
         return swt_num if self.total_checkers() == 0 else -1
     
-    def checkOrthBaseMod(self,modularity_limit,swt):
+    def checkOrdParMod(self,modularity_limit,swt,relaxed=True):
         i,j,k,l = swt
         for u in range(self.n):   
-            s = self.orthBase[:,u]
-            if self.orthBaseMod[u] + (s[i]-s[j])*(s[k]-s[l])*2/sum(self.deg) > modularity_limit:
+            if relaxed and (i<=u and u<j) and (k<=u and u<l) and \
+                self.ordParMod[u] <= modularity_limit and \
+                self.ordParMod[u] + 8/sum(self.deg) > modularity_limit:
                 return False
-        return True
-    
-    def checkOrdParMod(self,modularity_limit,swt):
-        i,j,k,l = swt
-        for u in range(self.n):   
-            if (i<=u and u<j) and (k<=u and u<l) and self.ordParMod[u] + 8/sum(self.deg) > modularity_limit:
+            elif not relaxed and (self.orthBaseMod[u] > modularity_limit) or (self.orthBaseMod[u] <= modularity_limit and \
+                self.orthBaseMod[u] + (self.orthBase[i,u]/np.sqrt(self.deg[i])-self.orthBase[j,u]/np.sqrt(self.deg[j]))\
+                                    * (self.orthBase[k,u]/np.sqrt(self.deg[k])-self.orthBase[l,u]/np.sqrt(self.deg[l]))*2 > modularity_limit):
                 return False
         return True
      
-    def modAwareSwitch(self,modularity_limit,small_switch_limit=-1,maxcnt = 10000):
+    def modAwareSwitch(self,modularity_limit,small_switch_limit=-1,maxcnt = 10000,relaxed = True):
         """Performs a random positive switch that does not increase 
         the modulatity of all n sorted partition cut over the modularity_limit
         """
         if small_switch_limit == -1:
-            small_switch_limit = 0
-        swt_num = 0
+            small_switch_limit = 1
         itercnt = 0
         done = False
         while not done and self.total_checkers() > 0 and itercnt<maxcnt:
             itercnt += 1 
             swt = self.find_random_checker()
-            i, j, k, l = swt
             
-            if l-k <= small_switch_limit or j-i <= small_switch_limit:
+            i, j, k, l = swt
+            if min(self.deg[l]-self.deg[k],self.deg[j]-self.deg[i]) == 0:
                 continue
-            if self.checkOrdParMod(modularity_limit,swt):#max(M) <= modularity_limit:
+            #if k>j and self.deg[k]-self.deg[j]<=0:
+            #    continue
+            if self.checkOrdParMod(modularity_limit,swt,relaxed = relaxed):#max(M) <= modularity_limit:
                 self.switch(swt)
                 self.swt_done += 1
                 done = True
-                
-        if itercnt == maxcnt:
-            return (-1,-1,-1,-1)
-        return (i.item(),j.item(),k.item(),l.item())
-    
-    def modAwareSwitchOrth(self,modularity_limit,small_switch_limit=-1,maxcnt = 10000):
-        """Performs a random positive switch that does not increase 
-        the modulatity of all n sorted partition cut over the modularity_limit
-        """
-        if small_switch_limit == -1:
-            small_switch_limit = self.n
-        swt_num = 0
-        itercnt = 0
-        done = False
-        while not done and self.total_checkers() > 0 and itercnt<maxcnt:
-            itercnt += 1 
-            swt = self.find_random_checker()
-            i, j, k, l = swt
-            
-            if l-k <= small_switch_limit or j-i <= small_switch_limit:
-                continue
-            if self.checkOrthBaseMod(modularity_limit,swt):#max(M) <= modularity_limit:
-                self.switch(swt)
-                self.swt_done += 1
-                done = True
-        if itercnt == maxcnt:
+        if not done:
             return (-1,-1,-1,-1)
         return (i.item(),j.item(),k.item(),l.item())
 
