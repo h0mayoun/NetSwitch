@@ -22,8 +22,8 @@ def getLk(M, k):
     eigVec = eigVec[:, idx]
     return eigVal[k], eigVec[:, k]
 
-def getParVec(G):
-    v2, u2 = getLk(I - Dsqrt @ G.A @ Dsqrt, 1)
+def getParVec(G,D_n):
+    v2, u2 = getLk(I - D_n @ G.A @ D_n, 1)
     s = np.sign(u2)
     return s
 
@@ -60,8 +60,8 @@ def plotNetSwitchGraph(G,ax,s,vertex_size = -1,edge_width = 0.1):
             edge_width = edgewidth, edge_arrow_size = 0,edge_arrow_width=0,layout="circle",
             target=ax,vertex_color = color,edge_color = edgecolor,vertex_frame_width=0)
 
-n=256
-p=np.log2(n)*1.3/n
+n=16
+p=np.log2(n)*1.5/n
 kn = 3
 graphtype = "ER"
 if graphtype == "ER":
@@ -80,55 +80,62 @@ elif graphtype == "SBM":
     graph = ig.Graph.SBM(n=n, pref_matrix = prefMatrix.tolist(),block_sizes = blockSize.tolist())
 
 G = NetSwitch(graph)
-Dsqrt = np.diag(1.0 / np.sqrt(G.deg))
-A_n = Dsqrt @ G.A @ Dsqrt
+
+Dinvsqrt = [1.0 / i if i!=0 else 0 for i in G.deg]
+D_n = np.diag(Dinvsqrt)
+A_n = D_n @ G.A @ D_n
 m = sum(G.deg)/2
 
-#modularity_limit = np.min(G.ordParMod)
-modularity_limit = np.max(G.orthBaseMod)
-I = np.eye(n)
-v2initial, _ = getLk(I - Dsqrt @ G.A @ Dsqrt, 1)
-v1initial, _ = getLk(G.A, n-1)
+modularity_limit = np.max(G.base_mod)
+#modularity_limit = np.max(G.orthBaseMod)
 
+I = np.eye(n)
+v2initial, _ = getLk(D_n @ G.M @ D_n, n-2)
+vl2initial, ul2initial = getLk(I - D_n @ G.A @ D_n, 1)
+v1initial, _ = getLk(G.A, n-1)
 startTime = time.time()
 switches = 0
 while True:
     print(switches)
     switches+=1
     
-    swt = G.modAwareSwitch(modularity_limit,relaxed=False)
+    swt = G.modAwareSwitch(v2initial,normalized=False)
 
     if(swt == (-1,-1,-1,-1)):
         break
     
 I = np.eye(n)
-v2, u2 = getLk(I - Dsqrt @ G.A @ Dsqrt, range(n))
+v2, u2 = getLk(D_n @ G.M @ D_n, n-2)
 v1, _ = getLk(G.A, n-1)
 
+vl2final, _ = getLk(I - D_n @ G.A @ D_n, 1)
 totalTime = time.time()-startTime
 print(str(switches)+" switches in "+str(totalTime)+" (s)")
 fig,ax = plt.subplots(1,2,figsize=(10, 5))
 if graphtype == "ER":
     st = fig.suptitle("ER; n:"+str(n)+"; p:"+str(np.round(p,2)) +"; seed:"+str(seed)+
-                      "\nl2initial:" +str(np.round(v2initial,2))+"; l2final:"+str(np.round(v2[1],2))+
-                      "\nl1initial:" +str(np.round(v1initial,2))+"; l1final:"+str(np.round(v1,2))+
+                      "\nl2Binitial:" +str(np.round(v2initial,2))+"; l2Bfinal:"+str(np.round(v2,2))+
+                      "\nl1Ainitial:" +str(np.round(v1initial,2))+"; l1Afinal:"+str(np.round(v1,2))+
+                      "\nl2Linitial:" +str(np.round(vl2initial,2))+"; l2Lfinal:"+str(np.round(vl2final,2))+
                       "\n switches:"+str(switches)+"; time(s):"+str(np.round(totalTime,2)), fontsize="x-large")
 elif graphtype == "BA":
     st = fig.suptitle("BA; n:"+str(n)+"; p:"+str(kn) +"; seed:"+str(seed)+
-                      "\nl2initial:" +str(np.round(v2initial,2))+"; l2final:"+str(np.round(v2[1],2))+
+                      "\nl2initial:" +str(np.round(v2initial,2))+"; l2final:"+str(np.round(v2,2))+
                       "\nl1initial:" +str(np.round(v1initial,2))+"; l1final:"+str(np.round(v1,2))+
+                      "\nl2Linitial:" +str(np.round(vl2initial,2))+"; l2Lfinal:"+str(np.round(vl2final,2))+
                       "\n switches:"+str(switches)+"; time(s):"+str(np.round(totalTime,2)), fontsize="x-large")
 elif graphtype == "WS":
     st = fig.suptitle("WS; n:"+str(n)+"; k:"+str(kn)+"; p:"+str(np.round(p,2)) +"; seed:"+str(seed)+
                       "\nl2initial:" +str(np.round(v2initial,2))+"; l2final:"+str(np.round(v2[1],2))+
                       "\nl1initial:" +str(np.round(v1initial,2))+"; l1final:"+str(np.round(v1,2))+
+                      "\nl2Linitial:" +str(np.round(vl2initial,2))+"; l2Lfinal:"+str(np.round(vl2final,2))+
                       "\n switches:"+str(switches)+"; time(s):"+str(np.round(totalTime,2)), fontsize="x-large")
 elif graphtype == "SBM":
     st = fig.suptitle("SBM; n:"+str(n)+"; k:"+str(kn) +"; seed:"+str(seed)+
                       "\nl2initial:" +str(np.round(v2initial,2))+"; l2final:"+str(np.round(v2[1],2))+
                       "\nl1initial:" +str(np.round(v1initial,2))+"; l1final:"+str(np.round(v1,2))+
                       "\n switches:"+str(switches)+"; time(s):"+str(np.round(totalTime,2)), fontsize="x-large")
-s = getParVec(G)
+s = getParVec(G,D_n)
 plotAdjacencyImage(G,ax[0],s)
 plotNetSwitchGraph(G,ax[1],s)  
 #ax[2].bar(np.arange(1,G.n+1),G.deg,color = ["red" if i>0 else "blue" for i in s])

@@ -20,20 +20,22 @@ class NetSwitch:
             for j in range(self.n):
                 self.M[i,j] = self.A[i,j] - (self.deg[i]*self.deg[j])/(2*self.m)
             
-        self.orthBase = np.zeros((self.n,self.n))
-        for u in range(self.n):
-            s = np.array([-1/np.sqrt(self.n) if i<=u else 1/np.sqrt(self.n) for i in range(self.n)])
-            self.orthBase[:,u] = s
-            
-        self.orthBaseMod = np.zeros(self.n)
-        for u in range(self.n):
-            self.orthBaseMod[u] = (self.orthBase[:,u].T @ self.Dsqrt @ self.M @self.Dsqrt @ self.orthBase[:,u])
-            
-        self.ordParMod = np.zeros(self.n)
+        self.base = np.zeros((self.n,self.n))
         for u in range(self.n):
             s = np.array([-1 if i<=u else 1 for i in range(self.n)])
-            self.ordParMod[u] = (s.T @ self.M @ s)/sum(self.deg)
+            self.base[:,u] = s/np.sqrt(self.n)
+          
+        self.base_mod_N = np.zeros(self.n)
+        for u in range(self.n):
+            self.base_mod_N[u] = (self.base[:,u].T @ self.Dsqrt @ self.M @self.Dsqrt @ self.base[:,u])
+        
+        self.base_mod = np.zeros(self.n)
+        for u in range(self.n):
+            self.base_mod[u] = (self.base[:,u].T @ self.M @ self.base[:,u])  
 
+    def set_base(self,base):
+        self.base = base
+        
     def sort_adj(self):
         sortIdx = np.argsort(-self.deg)
         self.A = self.A[sortIdx, :][:, sortIdx]
@@ -174,12 +176,11 @@ class NetSwitch:
         )
         
         for u in range(self.n):
-            if (i<=u and u<j) and (k<=u and u<l) :
-                self.ordParMod[u] = self.ordParMod[u] + 8/sum(self.deg)
+            self.base_mod_N[u] = self.base_mod_N[u] + (self.base[i,u]/np.sqrt(self.deg[i])-self.base[j,u]/np.sqrt(self.deg[j])) \
+                                                    * (self.base[k,u]/np.sqrt(self.deg[k])-self.base[l,u]/np.sqrt(self.deg[l])) * 2
             
-        for u in range(self.n):
-            self.orthBaseMod[u] = self.orthBaseMod[u] + (self.orthBase[i,u]/np.sqrt(self.deg[i])-self.orthBase[j,u]/np.sqrt(self.deg[j])) \
-                                                      * (self.orthBase[k,u]/np.sqrt(self.deg[k])-self.orthBase[l,u]/np.sqrt(self.deg[l]))*2#(self.orthBase[:,u].T @ self.Dsqrt @ self.M @self.Dsqrt @ self.orthBase[:,u])/sum(self.deg)
+            self.base_mod[u] = self.base_mod[u] + (self.base[i,u]-self.base[j,u]) \
+                                                * (self.base[k,u]-self.base[l,u]) * 2
             
         self.update_N(swt)
         if update_B:
@@ -383,20 +384,21 @@ class NetSwitch:
 
         return swt_num if self.total_checkers() == 0 else -1
     
-    def checkOrdParMod(self,modularity_limit,swt,relaxed=True):
+    def checkOrdParMod(self,modularity_limit,swt,normalized = True):
         i,j,k,l = swt
         for u in range(self.n):   
-            if relaxed and (i<=u and u<j) and (k<=u and u<l) and \
-                self.ordParMod[u] <= modularity_limit and \
-                self.ordParMod[u] + 8/sum(self.deg) > modularity_limit:
+            new_modularity = self.base_mod[u] + (self.base[i,u]-self.base[j,u]) \
+                            * (self.base[k,u]-self.base[l,u]) * 2
+            new_modularity_N = self.base_mod_N[u] + (self.base[i,u]/np.sqrt(self.deg[i])-self.base[j,u]/np.sqrt(self.deg[j])) \
+                            * (self.base[k,u]/np.sqrt(self.deg[k])-self.base[l,u]/np.sqrt(self.deg[l])) * 2
+            
+            if not normalized and (self.base_mod[u] < modularity_limit and new_modularity >= modularity_limit):
                 return False
-            elif not relaxed and (self.orthBaseMod[u] > modularity_limit) or (self.orthBaseMod[u] <= modularity_limit and \
-                self.orthBaseMod[u] + (self.orthBase[i,u]/np.sqrt(self.deg[i])-self.orthBase[j,u]/np.sqrt(self.deg[j]))\
-                                    * (self.orthBase[k,u]/np.sqrt(self.deg[k])-self.orthBase[l,u]/np.sqrt(self.deg[l]))*2 > modularity_limit):
+            elif normalized and (self.base_mod_N[u] < modularity_limit and new_modularity_N >= modularity_limit):
                 return False
         return True
      
-    def modAwareSwitch(self,modularity_limit,small_switch_limit=-1,maxcnt = 10000,relaxed = True):
+    def modAwareSwitch(self,modularity_limit,small_switch_limit=-1,maxcnt = 10000,normalized = True):
         """Performs a random positive switch that does not increase 
         the modulatity of all n sorted partition cut over the modularity_limit
         """
@@ -409,16 +411,20 @@ class NetSwitch:
             swt = self.find_random_checker()
             
             i, j, k, l = swt
-            if min(self.deg[l]-self.deg[k],self.deg[j]-self.deg[i]) == 0:
-                continue
+            #if min(self.deg[l]-self.deg[k],self.deg[j]-self.deg[i]) == 0:
+            #    continue
             #if k>j and self.deg[k]-self.deg[j]<=0:
             #    continue
-            if self.checkOrdParMod(modularity_limit,swt,relaxed = relaxed):#max(M) <= modularity_limit:
+            if self.checkOrdParMod(modularity_limit,swt,normalized = normalized):#max(M) <= modularity_limit:
                 self.switch(swt)
                 self.swt_done += 1
                 done = True
         if not done:
             return (-1,-1,-1,-1)
+        if normalized:
+            print(self.base_mod_N)
+        else:
+            print(self.base_mod)
         return (i.item(),j.item(),k.item(),l.item())
 
     def XBS(self, pos_p=0.5, count=1):

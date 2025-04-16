@@ -23,8 +23,8 @@ def getLk(M, k):
     return eigVal[k], eigVec[:, k]
 
 
-n=256
-p=np.log(n)*1.3/n
+n=32
+p=np.log(n)*1.5/n
 kn = 3
 graphtype = "ER"
 if graphtype == "ER":
@@ -40,16 +40,17 @@ m = sum(G.deg)/2
 
 
 #modularity_limit = max(G.orthBaseMod)
-modularity_limit = max(G.ordParMod)
+#modularity_limit = max(G.ordParMod)
 I = np.eye(n)
 fig = plt.figure(figsize=(9, 9))
 cmap = colors.ListedColormap(["tab:blue", "white", "tab:purple", "tab:red"])
 
-lambdas = np.zeros((3, 0))
+lambdas = np.zeros((4, 0))
 va1, _ = getLk(G.A, n - 1)
-#vl2, ul2 = getLk(I - Dsqrt @ G.A @Dsqrt, 1)
+vll2, ul2 = getLk(I - Dsqrt @ G.A @Dsqrt, 1)
 vl2, ul2 = getLk(Dsqrt @ G.M @ Dsqrt, n-2)
 cut = np.sign(ul2).T@G.A@np.sign(ul2)
+modularity_limit = vl2
 
 lambdas = np.hstack(
     (
@@ -57,6 +58,7 @@ lambdas = np.hstack(
         np.array(
             [
                 [va1],
+                [vll2],
                 [vl2],
                 [cut]
             ]
@@ -77,13 +79,14 @@ elif graphtype == "BA":
 while True:
     switches+=1
     
-    swt = G.modAwareSwitch(modularity_limit,small_switch_limit=0,relaxed=True)
+    swt = G.modAwareSwitch(modularity_limit,small_switch_limit=0,relaxed=False)
     if(swt == (-1,-1,-1,-1)):
         break
     
     
     #v2, u2 = getLk(I - Dsqrt @ G.A @ Dsqrt, 1)
     
+    vll2, ul2 = getLk(I - Dsqrt @ G.A @Dsqrt, 1)
     v2, u2 = getLk(Dsqrt @ G.M @ Dsqrt, n-2)
     s = np.sign(u2)
     s = s*s[0]
@@ -102,7 +105,7 @@ while True:
     ax2.set_yticks([])
 
     va1, _ = getLk(G.A, n - 1)
-    cut = s.T@G.A@s
+    cut = s.T@(np.diag(G.deg)-G.A)@s
 
     lambdas = np.hstack(
         (
@@ -110,6 +113,7 @@ while True:
             np.array(
                 [
                     [va1],
+                    [vll2],
                     [v2],
                     [cut]
                 ]
@@ -125,23 +129,25 @@ while True:
             edge_width = edgewidth, edge_arrow_size = 0,edge_arrow_width=0,layout="circle",
             target=ax3,vertex_color = color,edge_color = "black",vertex_frame_width=0)
 
-
+    
     im11, = ax1.plot([-1e9,1e9],[0,0], label="",color = 'k',linestyle = ':',linewidth = 0.1)
-    im12, = ax1.plot((lambdas[0, :] - lambdas[0, 0]) / lambdas[0, 0], label="L2A: a1",color = 'tab:orange')
-    im13, = ax1.plot((lambdas[1, :] - lambdas[1, 0]) / lambdas[1, 0], label="L2A: l2",color = 'tab:orange',linestyle = ':')
-    im14, = ax1.plot((lambdas[2, :] - lambdas[2, 0]) / lambdas[2, 0], label="L2A: M",color = 'tab:orange',linestyle = '--')
+    im12, = ax1.plot((lambdas[0, :] - lambdas[0, 0]) / lambdas[0, 0], label="L1A",color = 'tab:orange')
+    im14, = ax1.plot((lambdas[1, :] - lambdas[1, 0]) / lambdas[1, 0], label="L2L",color = 'tab:orange',linestyle = '-.')
+    im13, = ax1.plot((lambdas[2, :] - lambdas[2, 0]) / lambdas[2, 0], label="L2B",color = 'tab:orange',linestyle = ':')
+    im15, = ax1.plot((lambdas[3, :] - lambdas[3, 0]) / lambdas[3, 0], label="Cut",color = 'tab:orange',linestyle = '--')
     # im1, = ax1.plot([0,switches],[0,0], label="",color = 'k',linestyle = ':',linewidth = 0.1,
     #                 (lambdas[0, :] - lambdas[0, 0]) / lambdas[0, 0], label="L2A: a1",color = 'tab:orange',
     #                 (lambdas[1, :] - lambdas[1, 0]) / lambdas[1, 0], label="L2A: l2",color = 'tab:orange',linestyle = ':',
     #                 (lambdas[2, :] - lambdas[2, 0]) / lambdas[2, 0], label="L2A: M",color = 'tab:orange',linestyle = '--')
-    
+    if switches == 1:
+        ax1.legend()
     #ax4.legend(frameon = False,loc='upper center', bbox_to_anchor=(0.5, 1.2),ncol=4)
     ax1.set_xlim([0,switches])
     #print([im11,im12,im13,im14])
     #artist1, = ax1.get_images()
     #artist2, = ax2.get_images()
     #artist3, = ax3.get_images()
-    ims.append([im11,im12,im13,im14,im2,im3])
+    ims.append([im11,im12,im13,im14,im15,im2,im3])
     
 ani = animation.ArtistAnimation(fig, ims, interval=50, blit=True,
                                 repeat=False)
