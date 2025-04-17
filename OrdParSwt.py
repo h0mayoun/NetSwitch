@@ -60,8 +60,8 @@ def plotNetSwitchGraph(G,ax,s,vertex_size = -1,edge_width = 0.1):
             edge_width = edgewidth, edge_arrow_size = 0,edge_arrow_width=0,layout="circle",
             target=ax,vertex_color = color,edge_color = edgecolor,vertex_frame_width=0)
 
-n=16
-p=np.log2(n)*1.5/n
+n=256
+p=np.log2(n)*10/n
 kn = 3
 graphtype = "ER"
 if graphtype == "ER":
@@ -81,7 +81,7 @@ elif graphtype == "SBM":
 
 G = NetSwitch(graph)
 
-Dinvsqrt = [1.0 / i if i!=0 else 0 for i in G.deg]
+Dinvsqrt = [1.0 / G.deg[i] if i!=0 else 0 for i in G.deg]
 D_n = np.diag(Dinvsqrt)
 A_n = D_n @ G.A @ D_n
 m = sum(G.deg)/2
@@ -99,7 +99,7 @@ while True:
     print(switches)
     switches+=1
     
-    swt = G.modAwareSwitch(v2initial,normalized=False)
+    swt = G.modAwareSwitch(modularity_limit,normalized=False)
 
     if(swt == (-1,-1,-1,-1)):
         break

@@ -411,8 +411,8 @@ class NetSwitch:
             swt = self.find_random_checker()
             
             i, j, k, l = swt
-            #if min(self.deg[l]-self.deg[k],self.deg[j]-self.deg[i]) == 0:
-            #    continue
+            if min(self.deg[l]-self.deg[k],self.deg[j]-self.deg[i]) == 0:
+                continue
             #if k>j and self.deg[k]-self.deg[j]<=0:
             #    continue
             if self.checkOrdParMod(modularity_limit,swt,normalized = normalized):#max(M) <= modularity_limit:
@@ -421,10 +421,10 @@ class NetSwitch:
                 done = True
         if not done:
             return (-1,-1,-1,-1)
-        if normalized:
-            print(self.base_mod_N)
-        else:
-            print(self.base_mod)
+        # if normalized:
+        #     print(self.base_mod_N)
+        # else:
+        #     print(self.base_mod)
         return (i.item(),j.item(),k.item(),l.item())
 
     def XBS(self, pos_p=0.5, count=1):

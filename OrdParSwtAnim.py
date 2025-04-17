@@ -23,21 +23,33 @@ def getLk(M, k):
     return eigVal[k], eigVec[:, k]
 
 
-n=32
-p=np.log(n)*1.5/n
+n=128
+p=np.log2(n)*1.1/n
 kn = 3
 graphtype = "ER"
 if graphtype == "ER":
     graph = ig.Graph.Erdos_Renyi(n=n, p=p)
 elif graphtype == "BA":
     graph = ig.Graph.Barabasi(n=n, m=kn)
+elif graphtype == "WS":
+    graph = ig.Graph.Watts_Strogatz(dim=1, size=n, nei = kn, p=p)
+elif graphtype == "SBM":
+    blockSize = np.ones(kn,dtype = np.int64)*np.int64(n/kn)
+    blockSize[0] += n - sum(blockSize)
+    prefMatrix = np.ones((1,kn))*(1/kn)#np.random.rand(1,kn)
+    prefMatrix = prefMatrix.T@prefMatrix
+    print(prefMatrix.T@prefMatrix)
+    print(blockSize)
+    graph = ig.Graph.SBM(n=n, pref_matrix = prefMatrix.tolist(),block_sizes = blockSize.tolist())
 
 G = NetSwitch(graph)
 
-Dsqrt = np.diag(1.0 / np.sqrt(G.deg))
-A_n = Dsqrt @ G.A @ Dsqrt
+Dinvsqrt = [1.0 / G.deg[i] if i!=0 else 0 for i in G.deg]
+D_n = np.diag(Dinvsqrt)
+A_n = D_n @ G.A @ D_n
 m = sum(G.deg)/2
 
+modularity_limit = np.max(G.base_mod)
 
 #modularity_limit = max(G.orthBaseMod)
 #modularity_limit = max(G.ordParMod)
@@ -47,8 +59,8 @@ cmap = colors.ListedColormap(["tab:blue", "white", "tab:purple", "tab:red"])
 
 lambdas = np.zeros((4, 0))
 va1, _ = getLk(G.A, n - 1)
-vll2, ul2 = getLk(I - Dsqrt @ G.A @Dsqrt, 1)
-vl2, ul2 = getLk(Dsqrt @ G.M @ Dsqrt, n-2)
+vll2, ul2 = getLk(I - D_n @ G.A @D_n, 1)
+vl2, ul2 = getLk(D_n @ G.M @ D_n, n-2)
 cut = np.sign(ul2).T@G.A@np.sign(ul2)
 modularity_limit = vl2
 
@@ -79,15 +91,15 @@ elif graphtype == "BA":
 while True:
     switches+=1
     
-    swt = G.modAwareSwitch(modularity_limit,small_switch_limit=0,relaxed=False)
+    swt = G.modAwareSwitch(modularity_limit,small_switch_limit=0,normalized=False)
     if(swt == (-1,-1,-1,-1)):
         break
     
     
     #v2, u2 = getLk(I - Dsqrt @ G.A @ Dsqrt, 1)
     
-    vll2, ul2 = getLk(I - Dsqrt @ G.A @Dsqrt, 1)
-    v2, u2 = getLk(Dsqrt @ G.M @ Dsqrt, n-2)
+    vll2, ul2 = getLk(I - D_n @ G.A @D_n, 1)
+    v2, u2 = getLk(D_n @ G.M @ D_n, n-2)
     s = np.sign(u2)
     s = s*s[0]
     sPos = (s > 0).astype(np.float32).reshape(-1, 1)
@@ -151,6 +163,6 @@ while True:
     
 ani = animation.ArtistAnimation(fig, ims, interval=50, blit=True,
                                 repeat=False)
-FFwriter = animation.FFMpegWriter(fps=10)
+#FFwriter = animation.FFMpegWriter(fps=10)
 num = len(os.listdir("animation"))
-ani.save("animation/"+"switch"+str(num+1)+".mp4",dpi = 300,writer=FFwriter)
+ani.save("animation/"+"switch"+str(num+1)+".gif",dpi = 300)#,writer=FFwriter)
