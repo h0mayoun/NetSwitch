@@ -1,19 +1,29 @@
 import numpy as np
-import random
-import copy
-from scipy.stats import ortho_group
+from scipy.sparse.linalg import eigsh
 
+# from sympy.strategies.core import switch
+import itertools
+import random
+
+import igraph as ig
+from matplotlib import colors
 
 class NetSwitch:
 
-    def __init__(self, G, base=np.array([[-1]])):
+    def __init__(self, G):
         self.A = np.array(G.get_adjacency().data, dtype=np.int8)
         self.n = np.shape(self.A)[0]
         self.deg = self.degree_seq()
+        self.m = np.sum(self.deg)/2
         self.sort_adj()
         self.countonce = True
         self.checkercount_matrix()
         self.swt_done = 0
+
+        # -------------------------------------------Modularity Aware Modification---------------------------------------
+
+        self.swt_rejected = 0
+
         self.M = np.zeros((self.n, self.n))
         self.m = np.sum(self.deg) / 2
         self.Dsqrt = np.diag(
@@ -27,17 +37,12 @@ class NetSwitch:
             for j in range(self.n):
                 self.M[i, j] = self.A[i, j] - (self.deg[i] * self.deg[j]) / (2 * self.m)
 
-        print(base.all())
-        if np.all(base == -1):
-            self.base = np.zeros((self.n, self.n))
-            for u in range(self.n):
-                self.base[:, u] = np.array([-1 if i <= u else 1 for i in range(self.n)])
-        else:
-            self.base = base
-        self.numbase = self.base.shape[1]
-
-        for u in range(self.numbase):
+        self.base = np.zeros((self.n, self.n))
+        for u in range(self.n):
+            self.base[:, u] = np.array([-1 if i <= u else 1 for i in range(self.n)])
             self.base[:, u] = self.base[:, u] / np.linalg.norm(self.base[:, u])
+
+        self.numbase = self.base.shape[1]
 
         self.base_mod_N = np.zeros(self.numbase)
         for u in range(self.numbase):
@@ -48,9 +53,12 @@ class NetSwitch:
         self.base_mod = np.zeros(self.numbase)
         for u in range(self.numbase):
             self.base_mod[u] = self.base[:, u].T @ self.M @ self.base[:, u]
-
-    def set_base(self, base):
-        self.base = base
+            
+        modLimApx = np.zeros(self.n)
+        for u in range(self.n):
+            s = np.array([-self.deg[i]/np.sqrt(2*self.m*self.n) if i < u else self.deg[i]/np.sqrt(2*self.m*self.n) for i in range(self.n)]).reshape(1,-1)
+            #print(s)
+            modLimApx[u] = np.mean(self.deg)-np.sum(s.T@s)
 
     def sort_adj(self):
         sortIdx = np.argsort(-self.deg)
@@ -135,8 +143,7 @@ class NetSwitch:
         """Given a checkerboard (i, j, k, l) is switched,
         updates the matrix N that holds counts of checkerboards in matrix A"""
 
-        i, j, k, l = swt
-        for ref_row in [i, j, k, l]:
+        for ref_row in swt:
             for row in range(ref_row):
                 self.N[row, ref_row] = self.count_rowpair_checkers_fast(
                     row, ref_row
@@ -156,11 +163,35 @@ class NetSwitch:
                 )
                 self.Nrow[ref_row] = np.sum(self.N[ref_row, :])
 
+    def update_Nrow(self, rowi):
+        self.Nrow[rowi] = np.sum(self.N[rowi, :])
+
+    def update_B(self, swt):
+        """Given a checkerboard (i, j, k, l) is switched,
+        updates the array B that holds size of row-pair checkerboards in matrix A"""
+
+        i, j, k, l = swt
+        for ref_row in [i, j, k, l]:
+            for row in range(ref_row):
+                diag_idx = self.coord2diag(row, ref_row)
+                if self.N[row, ref_row] == 0:
+                    self.B[diag_idx] = -1
+                elif self.B[diag_idx] != 0:
+                    lft, rgt = self.largest_kl(row, ref_row)
+                    self.B[diag_idx] = (ref_row - row) * (rgt - lft)
+            for row in range(ref_row + 1, self.n):
+                diag_idx = self.coord2diag(ref_row, row)
+                if self.N[ref_row, row] == 0:
+                    self.B[diag_idx] = -1
+                elif self.B[diag_idx] != 0:
+                    lft, rgt = self.largest_kl(ref_row, row)
+                    self.B[diag_idx] = (row - ref_row) * (rgt - lft)
+
     def total_checkers(self):
         """Returns the total number of checkerboards left in the adjacency matrix"""
         return np.sum(self.Nrow)
 
-    def switch(self, swt, update_B=False):
+    def switch(self, swt, update_N=True, update_B=False):
         """Switches a selected checkrboard in matrix A and calls for an update in checkerboard count
         given the coordinates (i, j, k, l), the checkerboars is at (i, k), (i, l), (j, k), (j, l)
         and the mirrored coordinates (k, i), (l, i), (k, j), (l, j) in matrix A"""
@@ -177,41 +208,11 @@ class NetSwitch:
             1 - self.A[k, j],
             1 - self.A[l, j],
         )
-        self.M[i, k], self.M[i, l], self.M[j, k], self.M[j, l] = (
-            self.M[i, k] + 1,
-            self.M[i, l] - 1,
-            self.M[j, k] - 1,
-            self.M[j, l] + 1,
-        )
-        self.M[k, i], self.M[l, i], self.M[k, j], self.M[l, j] = (
-            self.M[k, i] + 1,
-            self.M[l, i] - 1,
-            self.M[k, j] - 1,
-            self.M[l, j] + 1,
-        )
-
-        for u in range(self.numbase):
-            self.base_mod_N[u] = (
-                self.base_mod_N[u]
-                + (
-                    self.base[i, u] / np.sqrt(self.deg[i])
-                    - self.base[j, u] / np.sqrt(self.deg[j])
-                )
-                * (
-                    self.base[k, u] / np.sqrt(self.deg[k])
-                    - self.base[l, u] / np.sqrt(self.deg[l])
-                )
-                * 2
-            )
-
-            self.base_mod[u] = (
-                self.base_mod[u]
-                + (self.base[i, u] - self.base[j, u])
-                * (self.base[k, u] - self.base[l, u])
-                * 2
-            )
-
-        self.update_N(swt)
+        # ---------------------------------Modularity Aware Modification--------------------------------
+        self.update_M(swt)
+        # ----------------------------------------------------------------------------------------------
+        if update_N:
+            self.update_N(swt)
         if update_B:
             self.update_B(swt)
 
@@ -254,6 +255,59 @@ class NetSwitch:
         ]
 
         return (rnd_i, rnd_j, rnd_k, rnd_l)
+
+    def get_all_checkers(self, row_i, row_j):
+        all_checkerboard_sides = (
+            row_i
+            + 1
+            + np.nonzero(self.A[row_i, row_i + 1 :] ^ self.A[row_j, row_i + 1 :])[0]
+        )
+        all_checkerboard_sides = np.delete(
+            all_checkerboard_sides, np.where(all_checkerboard_sides == row_j)
+        )
+        all_ls = all_checkerboard_sides[
+            np.nonzero(self.A[row_i, all_checkerboard_sides])[0]
+        ]
+        all_ks = all_checkerboard_sides[
+            np.nonzero(self.A[row_j, all_checkerboard_sides])[0]
+        ]
+        all_kls = [i for i in itertools.product(all_ks, all_ls) if i[0] < i[1]]
+        return random.sample(all_kls, len(all_kls))
+
+    def batch_switch(self, row_i, row_j):
+        all_checkerboard_sides = (
+            row_i
+            + 1
+            + np.nonzero(self.A[row_i, row_i + 1 :] ^ self.A[row_j, row_i + 1 :])[0]
+        )
+        all_checkerboard_sides = np.delete(
+            all_checkerboard_sides, np.where(all_checkerboard_sides == row_j)
+        )
+        all_ls = all_checkerboard_sides[
+            np.nonzero(self.A[row_i, all_checkerboard_sides])[0]
+        ][::-1]
+        all_ks = all_checkerboard_sides[
+            np.nonzero(self.A[row_j, all_checkerboard_sides])[0]
+        ]
+        min_size = np.min([all_ks.size, all_ls.size])
+        all_ls = all_ls[:min_size]
+        all_ks = all_ks[:min_size]
+        batch_idxs = np.where(all_ls - all_ks > 0)[0]
+
+        self.A[row_i, all_ks[batch_idxs]] = 1
+        self.A[row_i, all_ls[batch_idxs]] = 0
+        self.A[row_j, all_ks[batch_idxs]] = 0
+        self.A[row_j, all_ls[batch_idxs]] = 1
+
+        self.A[all_ks[batch_idxs], row_i] = 1
+        self.A[all_ls[batch_idxs], row_i] = 0
+        self.A[all_ks[batch_idxs], row_j] = 0
+        self.A[all_ls[batch_idxs], row_j] = 1
+        self.update_N(
+            swt=np.concatenate(
+                ([row_i, row_j], all_ks[batch_idxs], all_ls[batch_idxs]), axis=None
+            )
+        )
 
     def largest_kl(self, row_i, row_j):
         for left_k in range(row_i + 1, self.n - 1):
@@ -373,6 +427,118 @@ class NetSwitch:
                     if self.swt_done == 0:
                         self.i, self.j = 0, self.n - 1
                     swt = self.next_ij_diag()
+                case "BLOC":
+                    if self.swt_done == 0:
+                        self.block_idx = 0
+                    while True:
+                        cur_i, cur_j = self.diag2coord(self.block_idx)
+                        if self.N[cur_i, cur_j] == 0:
+                            self.block_idx += 1
+                            if self.block_idx == (self.n**2 - self.n) / 2:
+                                self.block_idx = 0
+                        else:
+                            self.batch_switch(cur_i, cur_j)
+                            break
+
+                case "SWPC":
+                    if self.swt_done == 0:
+                        self.org_nl2 = self.l2(normed=True)
+                    cswitch_found = False
+                    while not cswitch_found:
+                        if self.total_checkers() == 0:
+                            break
+                        possible_rowpairs = np.where(self.N > 0)
+                        rand_rowpair_idx = np.random.randint(possible_rowpairs[0].size)
+                        randi, randj = (
+                            possible_rowpairs[0][rand_rowpair_idx],
+                            possible_rowpairs[1][rand_rowpair_idx],
+                        )
+                        all_kls = self.get_all_checkers(randi, randj)
+                        for curk, curl in all_kls:
+                            swt = randi, randj, curk, curl
+                            self.switch(swt, update_N=False)
+                            new_nl2 = self.l2(normed=True)
+                            if new_nl2 >= self.org_nl2:
+                                self.update_N(swt)
+                                cswitch_found = True
+                                break
+                            else:
+                                self.swt_rejected += 1
+                                self.switch(swt, update_N=False)
+                        if not cswitch_found:
+                            self.N[randi, randj] = 0
+                            self.update_Nrow(randi)
+
+                # ----------------------------------- Modularity Aware Modification -----------------------------------------#
+
+                case "SWMA":
+                    if self.swt_done == 0:
+                        self.org_Mlev = self.Mlev(normed=False)
+                    cswitch_found = False
+                    while not cswitch_found:
+                        if self.total_checkers() == 0:
+                            break
+                        possible_rowpairs = np.where(self.N > 0)
+                        rand_rowpair_idx = np.random.randint(possible_rowpairs[0].size)
+                        randi, randj = (
+                            possible_rowpairs[0][rand_rowpair_idx],
+                            possible_rowpairs[1][rand_rowpair_idx],
+                        )
+                        all_kls = self.get_all_checkers(randi, randj)
+                        for curk, curl in all_kls:
+                            swt = randi, randj, curk, curl
+
+                            self.switch(swt, update_N=False)
+                            new_Mlev = self.Mlev(normed=False)
+                            if new_Mlev <= self.org_Mlev:
+                                self.update_N(swt)
+                                cswitch_found = True
+                                print(new_Mlev)
+                                break
+                            else:
+                                self.swt_rejected += 1
+                                self.switch(swt, update_N=False)
+                        if not cswitch_found:
+                            self.N[randi, randj] = 0
+                            self.update_Nrow(randi)
+
+                case "SWOP":
+                    if self.swt_done == 0:
+                        #self.m_limit = max(self.base_mod)
+                        self.m_limit = self.MScore(normed=False)
+                    cswitch_found = False
+                    while not cswitch_found:
+                        if self.total_checkers() == 0:
+                            break
+                        possible_rowpairs = np.where(self.N > 0)
+                        rand_rowpair_idx = np.random.randint(possible_rowpairs[0].size)
+                        randi, randj = (
+                            possible_rowpairs[0][rand_rowpair_idx],
+                            possible_rowpairs[1][rand_rowpair_idx],
+                        )
+                        all_kls = self.get_all_checkers(randi, randj)
+                        for curk, curl in all_kls:
+                            swt = randi, randj, curk, curl
+
+                            if not min(
+                                self.deg[curl] - self.deg[curk],
+                                self.deg[randj] - self.deg[randi],
+                            ) == 0 and self.checkOrdParMod(
+                                self.m_limit, swt, normalized=False
+                            ):
+                                print(self.swt_done)
+                                self.switch(swt, update_N=False)
+                                self.update_N(swt)
+                                cswitch_found = True
+                                break
+                            else:
+                                self.swt_rejected += 1
+                        if not cswitch_found:
+                            self.N[randi, randj] = 0
+                            self.update_Nrow(randi)
+
+                # -----------------------------------------------------------------------------------------------------------#
+
                 case "BEST":
                     if self.swt_done == 0:
                         self.B = np.zeros(int(self.n * (self.n - 1) / 2))
@@ -401,17 +567,247 @@ class NetSwitch:
                     # print(swt, i, j, k, l)
                     swt = i, j, k, l
                 case _:
-                    raise Exception("No such switching algorithm!!!")
+                    raise Exception("Undefined switching algorithm!!!")
 
-            i, j, k, l = swt
-            # print(i,j,k,l)
+            # i, j, k, l = swt
             # print([[self.A[i, k], self.A[i, l]], [self.A[j, k], self.A[j, l]]])
-            self.switch(swt, update_B=(True if alg == "BEST" else False))
+            if (
+                not alg == "SWPC"
+                and not alg == "BLOC"
+                and not alg == "SWMA"
+                and not alg == "SWOP"
+            ):
+                self.switch(swt, update_B=(True if alg == "BEST" else False))
+            if (alg == "SWPC" or alg == "SWMA" or alg == "SWOP") and not cswitch_found:
+                self.swt_done -= 1
             self.swt_done += 1
             swt_num += 1
             count -= 1
 
         return swt_num if self.total_checkers() == 0 else -1
+
+    def XBS(self, pos_p=0.5, count=1, force_update_N=False):
+        if pos_p == 1.0 and self.swt_done == 0:
+            self.checkercount_matrix(count_upper=False)
+        swt_num = 0
+        while count > 0 and (self.total_checkers() > 0 or pos_p < 1.0):
+            link_indices = np.where(self.A == 1)
+            while True:
+                if pos_p == 1.0:
+                    swt = self.find_random_checker()
+                    swt = [swt[0], swt[3], swt[1], swt[2]]
+                    break
+                else:
+                    link1, link2 = np.random.randint(len(link_indices[0]), size=2)
+                    swt = np.empty(4, dtype="int")
+                    swt[0], swt[1] = link_indices[0][link1], link_indices[1][link1]
+                    swt[2], swt[3] = link_indices[0][link2], link_indices[1][link2]
+                    if len(set(swt)) == 4:
+                        break
+            if pos_p > np.random.rand():
+                argSort = np.argsort(swt)
+                if (
+                    self.A[swt[argSort[0]], swt[argSort[1]]] == 0
+                    and self.A[swt[argSort[2]], swt[argSort[3]]] == 0
+                ):
+                    # Condition is met to perform the assortative switch
+                    self.A[swt[0], swt[1]], self.A[swt[1], swt[0]] = 0, 0
+                    self.A[swt[2], swt[3]], self.A[swt[3], swt[2]] = 0, 0
+                    (
+                        self.A[swt[argSort[0]], swt[argSort[1]]],
+                        self.A[swt[argSort[1]], swt[argSort[0]]],
+                    ) = (1, 1)
+                    (
+                        self.A[swt[argSort[2]], swt[argSort[3]]],
+                        self.A[swt[argSort[3]], swt[argSort[2]]],
+                    ) = (1, 1)
+                    count -= 1
+                    self.swt_done += 1
+                    if pos_p == 1.0 or force_update_N:
+                        self.update_N(swt, count_upper=False)
+            elif self.A[swt[0], swt[3]] == 0 and self.A[swt[1], swt[2]] == 0:
+                # Condition is met to perform the random switch
+                self.A[swt[0], swt[1]], self.A[swt[1], swt[0]] = 0, 0
+                self.A[swt[2], swt[3]], self.A[swt[3], swt[2]] = 0, 0
+                self.A[swt[0], swt[3]], self.A[swt[3], swt[0]] = 1, 1
+                self.A[swt[1], swt[2]], self.A[swt[2], swt[1]] = 1, 1
+                count -= 1
+                swt_num += 1
+                self.swt_done += 1
+                if pos_p == 1.0 or force_update_N:
+                    self.update_N(swt, count_upper=False)
+        return swt_num if (pos_p == 1.0 and self.total_checkers() == 0) else -1
+
+    def Havel_Hakimi(self, replace_adj=False):
+        """Havel-Hakimi Algorithm solution for
+        assembling a graph given a degree sequence.
+        This function returns False if the degree sequence is not graphic."""
+        HH_adj = np.zeros((self.n, self.n))
+        sorted_nodes = [i for i in zip(self.deg.copy(), range(self.n))]
+        v1 = sorted_nodes[0]
+        this_degree = v1[0]
+        while this_degree > 0:
+            if this_degree >= self.n:
+                return False
+            else:
+                # Connecting the node with most remaining stubs to those sorted immediately after
+                for v2_idx in range(1, this_degree + 1):
+                    v2 = sorted_nodes[v2_idx]
+                    # If condition met, the sequence is not graphic
+                    if v2[0] == 0:
+                        return False
+                    else:
+                        sorted_nodes[v2_idx] = (v2[0] - 1, v2[1])
+                        HH_adj[v1[1], v2[1]], HH_adj[v2[1], v1[1]] = 1, 1
+                sorted_nodes[0] = (0, sorted_nodes[0][1])
+                # Re-sorting the nodes based on the count of remaining stubs
+                sorted_nodes = sorted(
+                    sorted_nodes, key=lambda x: (x[0], -x[1]), reverse=True
+                )
+                v1 = sorted_nodes[0]
+                this_degree = v1[0]
+        if replace_adj:
+            self.A = np.array(HH_adj, dtype=np.int8)
+            return True
+        else:
+            return HH_adj
+
+    def degree_seq(self):
+        """Returns the degree sequence of a graph from its adjacency matrix."""
+        return np.sum(self.A, axis=1)
+
+    def assortativity_coeff(self):
+        """Calculates the assortativity coefficient for a graph
+        from its binary adjacncy matrix.
+        Calculations based on [PHYSICAL REVIEW E 84, 047101 (2011)]."""
+        m = np.sum(self.A) / 2.0
+        all_i, all_j = np.where(np.triu(self.A))
+        M2 = np.sum(self.deg[all_i] * self.deg[all_j]) / m
+        di1 = (np.sum(self.deg[all_i] + self.deg[all_j]) / (m * 2.0)) ** 2
+        di2 = np.sum(self.deg[all_i] ** 2 + self.deg[all_j] ** 2) / (m * 2.0)
+        return (M2 - di1) / (di2 - di1)
+
+    def laplacian(self):
+        return np.diag(self.deg) - self.A
+
+    def normalized_laplacian(self):
+        Dm05 = np.diag([1 / np.sqrt(self.deg[i]) if self.deg[i]!=0 else 0 for i in range(self.n)])
+        return np.matmul(np.matmul(Dm05, self.laplacian()), Dm05)
+    
+    def normalized_adjacency(self):
+        Dm05 = np.diag([1 / np.sqrt(self.deg[i]) if self.deg[i]!=0 else 0 for i in range(self.n)])
+        return np.eye(self.n) - Dm05 @ self.A @ Dm05
+    
+    def normalized_modularity(self):
+        Dm05 = np.diag([1 / np.sqrt(self.deg[i]) if self.deg[i]!=0 else 0 for i in range(self.n)])
+        return Dm05 @ self.M @ Dm05
+
+    def l2(self, normed=True):
+        try:
+            if normed:
+                eig_vals = eigsh(
+                    self.normalized_laplacian(),
+                    k=2,
+                    which="SM",
+                    return_eigenvectors=False,
+                )
+            else:
+                eig_vals = eigsh(
+                    self.laplacian(), k=2, which="SM", return_eigenvectors=False
+                )
+            return max(eig_vals)
+        except:
+            if normed:
+                eigVal, _ = np.linalg.eig(self.normalized_laplacian())
+                idx = np.argsort(eigVal)
+                return eigVal[idx[1]]
+            else:
+                eigVal, _ = np.linalg.eig(self.laplacian())
+                idx = np.argsort(eigVal)
+                return eigVal[idx[1]]
+
+    def lev(self):
+        eig_val = eigsh(
+            self.A.astype(float), k=1, which="LM", return_eigenvectors=False
+        )[0]
+        return eig_val
+
+    def Mlev(self, normed=True):
+        if normed:
+            eig_val = eigsh(
+                self.normalized_modularity().astype(float), k=1, which="LA", return_eigenvectors=False
+            )[0]
+        else:
+            eig_val = eigsh(
+                self.M.astype(float), k=1, which="LA", return_eigenvectors=False
+            )[0]
+
+        return eig_val
+
+    
+
+    # -------------------------------------------Modularity Aware Modification---------------------------------------
+    def MScore(self, normed=True):
+        if normed:
+            eig_val, eig_vec = np.linalg.eig(self.normalized_modularity().astype(float))
+        else:
+            eig_val, eig_vec = np.linalg.eig(self.M.astype(float))
+        idx = np.argsort(eig_val)
+        eig_vec = np.sign(eig_vec[:,idx[self.n-1]].reshape(-1,1)) / np.sqrt(self.n)
+        return (eig_vec.T @ self.M @ eig_vec)[0, 0]
+        
+    def set_Base(self, base):
+        self.base = base
+        self.numbase = self.base.shape[1]
+        for u in range(self.n):
+            self.base[:, u] = self.base[:, u] / np.linalg.norm(self.base[:, u])
+
+        self.base_mod_N = np.zeros(self.numbase)
+        for u in range(self.numbase):
+            self.base_mod_N[u] = (
+                self.base[:, u].T @ self.Dsqrt @ self.M @ self.Dsqrt @ self.base[:, u]
+            )
+
+        self.base_mod = np.zeros(self.numbase)
+        for u in range(self.numbase):
+            self.base_mod[u] = self.base[:, u].T @ self.M @ self.base[:, u]
+
+    def update_M(self, swt):
+        i, j, k, l = swt
+
+        self.M[i, k], self.M[i, l], self.M[j, k], self.M[j, l] = (
+            self.M[i, k] - (1 - 2 * self.A[i, k]),
+            self.M[i, l] - (1 - 2 * self.A[i, l]),
+            self.M[j, k] - (1 - 2 * self.A[j, k]),
+            self.M[j, l] - (1 - 2 * self.A[j, l]),
+        )
+        self.M[k, i], self.M[l, i], self.M[k, j], self.M[l, j] = (
+            self.M[k, i] - (1 - 2 * self.A[k, i]),
+            self.M[l, i] - (1 - 2 * self.A[l, i]),
+            self.M[k, j] - (1 - 2 * self.A[k, j]),
+            self.M[l, j] - (1 - 2 * self.A[l, j]),
+        )
+
+        for u in range(self.numbase):
+            self.base_mod_N[u] = (
+                self.base_mod_N[u]
+                + (
+                    self.base[i, u] / np.sqrt(self.deg[i])
+                    - self.base[j, u] / np.sqrt(self.deg[j])
+                )
+                * (
+                    self.base[k, u] / np.sqrt(self.deg[k])
+                    - self.base[l, u] / np.sqrt(self.deg[l])
+                )
+                * 2
+            )
+
+            self.base_mod[u] = (
+                self.base_mod[u]
+                + (self.base[i, u] - self.base[j, u])
+                * (self.base[k, u] - self.base[l, u])
+                * 2
+            )
 
     def checkOrdParMod(self, modularity_limit, swt, normalized=True):
         i, j, k, l = swt
@@ -458,137 +854,108 @@ class NetSwitch:
             ):
                 return False
         return True
-
-    def modAwareSwitch(
-        self, modularity_limit, small_switch_limit=-1, maxcnt=10000, normalized=True
-    ):
-        """Performs a random positive switch that does not increase
-        the modulatity of all n sorted partition cut over the modularity_limit
-        """
-        if small_switch_limit == -1:
-            small_switch_limit = 1
-        itercnt = 0
-        done = False
-        while not done and self.total_checkers() > 0 and itercnt < maxcnt:
-            itercnt += 1
-            swt = self.find_random_checker()
-
-            i, j, k, l = swt
-            if min(self.deg[l] - self.deg[k], self.deg[j] - self.deg[i]) == 0:
-                continue
-            # if k>j and self.deg[k]-self.deg[j]<=0:
-            #    continue
-            if self.checkOrdParMod(
-                modularity_limit, swt, normalized=normalized
-            ):  # max(M) <= modularity_limit:
-                self.switch(swt)
-                self.swt_done += 1
-                done = True
-        if not done:
-            return (-1, -1, -1, -1)
-        # if normalized:
-        #     print(self.base_mod_N)
-        # else:
-        #     print(self.base_mod)
-        return (i.item(), j.item(), k.item(), l.item())
-
-    def XBS(self, pos_p=0.5, count=1):
-        if pos_p == 1.0 and self.swt_done == 0:
-            self.checkercount_matrix(count_upper=False)
-        swt_num = 0
-        while count > 0 and (self.total_checkers() > 0 or pos_p < 1.0):
-            link_indices = np.where(self.A == 1)
-            while True:
-                if pos_p == 1.0:
-                    swt = self.find_random_checker()
-                    swt = [swt[0], swt[3], swt[1], swt[2]]
-                    break
-                else:
-                    link1, link2 = np.random.randint(len(link_indices[0]), size=2)
-                    swt = np.empty(4, dtype="int")
-                    swt[0], swt[1] = link_indices[0][link1], link_indices[1][link1]
-                    swt[2], swt[3] = link_indices[0][link2], link_indices[1][link2]
-                    if len(set(swt)) == 4:
-                        break
-            if pos_p > np.random.rand():
-                argSort = np.argsort(swt)
-                if (
-                    self.A[swt[argSort[0]], swt[argSort[1]]] == 0
-                    and self.A[swt[argSort[2]], swt[argSort[3]]] == 0
-                ):
-                    # Condition is met to perform the assortative switch
-                    self.A[swt[0], swt[1]], self.A[swt[1], swt[0]] = 0, 0
-                    self.A[swt[2], swt[3]], self.A[swt[3], swt[2]] = 0, 0
-                    (
-                        self.A[swt[argSort[0]], swt[argSort[1]]],
-                        self.A[swt[argSort[1]], swt[argSort[0]]],
-                    ) = (1, 1)
-                    (
-                        self.A[swt[argSort[2]], swt[argSort[3]]],
-                        self.A[swt[argSort[3]], swt[argSort[2]]],
-                    ) = (1, 1)
-                    count -= 1
-                    self.swt_done += 1
-                    if pos_p == 1.0:
-                        self.update_N(swt, count_upper=False)
-            elif self.A[swt[0], swt[3]] == 0 and self.A[swt[1], swt[2]] == 0:
-                # Condition is met to perform the random switch
-                self.A[swt[0], swt[1]], self.A[swt[1], swt[0]] = 0, 0
-                self.A[swt[2], swt[3]], self.A[swt[3], swt[2]] = 0, 0
-                self.A[swt[0], swt[3]], self.A[swt[3], swt[0]] = 1, 1
-                self.A[swt[1], swt[2]], self.A[swt[2], swt[1]] = 1, 1
-                count -= 1
-                swt_num += 1
-                self.swt_done += 1
-                if pos_p == 1.0:
-                    self.update_N(swt, count_upper=False)
-        return swt_num if (pos_p == 1.0 and self.total_checkers() == 0) else -1
-
-    def Havel_Hakimi(self, replace_adj=False):
-        """Havel-Hakimi Algorithm solution for
-        assembling a graph given a degree sequence.
-        This function returns False if the degree sequence is not graphic."""
-        HH_adj = np.zeros((self.n, self.n))
-        sorted_nodes = [i for i in zip(self.deg.copy(), range(self.n))]
-        v1 = sorted_nodes[0]
-        this_degree = v1[0]
-        while this_degree > 0:
-            if this_degree >= self.n:
-                return False
-            else:
-                # Connecting the node with most remaining stubs to those sorted immediately after
-                for v2_idx in range(1, this_degree + 1):
-                    v2 = sorted_nodes[v2_idx]
-                    # If condition met, the sequence is not graphic
-                    if v2[0] == 0:
-                        return False
-                    else:
-                        sorted_nodes[v2_idx] = (v2[0] - 1, v2[1])
-                        HH_adj[v1[1], v2[1]], HH_adj[v2[1], v1[1]] = 1, 1
-                sorted_nodes[0] = (0, sorted_nodes[0][1])
-                # Re-sorting the nodes based on the count of remaining stubs
-                sorted_nodes = sorted(
-                    sorted_nodes, key=lambda x: (x[0], -x[1]), reverse=True
+    
+    def checkOrdParModNew(self, modularity_limit, swt, normalized=True):
+        i, j, k, l = swt
+        for u in range(self.numbase):
+            new_modularity = (
+                self.base_mod[u]
+                + (self.base[i, u] - self.base[j, u])
+                * (self.base[k, u] - self.base[l, u])
+                * 2
+            )
+            new_modularity_N = (
+                self.base_mod_N[u]
+                + (
+                    self.base[i, u] / np.sqrt(self.deg[i])
+                    - self.base[j, u] / np.sqrt(self.deg[j])
                 )
-                v1 = sorted_nodes[0]
-                this_degree = v1[0]
-        if replace_adj:
-            self.A = HH_adj
-            return True
-        else:
-            return HH_adj
+                * (
+                    self.base[k, u] / np.sqrt(self.deg[k])
+                    - self.base[l, u] / np.sqrt(self.deg[l])
+                )
+                * 2
+            )
 
-    def degree_seq(self):
-        """Returns the degree sequence of a graph from its adjacency matrix."""
-        return np.sum(self.A, axis=1)
+            if not normalized and (
+                (
+                    new_modularity > self.base_mod[u]
+                    and self.base_mod[u] >= modularity_limit
+                )
+                or (
+                    self.base_mod[u] < modularity_limit
+                    and new_modularity >= modularity_limit
+                )
+            ):
+                return False
+            elif normalized and (
+                (
+                    new_modularity_N > self.base_mod_N[u]
+                    and self.base_mod_N[u] >= modularity_limit
+                )
+                or (
+                    self.base_mod_N[u] < modularity_limit
+                    and new_modularity_N >= modularity_limit
+                )
+            ):
+                return False
+        return True
 
-    def assortativity_coeff(self):
-        """Calculates the assortativity coefficient for a graph
-        from its binary adjacncy matrix.
-        Calculations based on [PHYSICAL REVIEW E 84, 047101 (2011)]."""
-        m = np.sum(self.A) / 2.0
-        all_i, all_j = np.where(np.triu(self.A))
-        M2 = np.sum(self.deg[all_i] * self.deg[all_j]) / m
-        di1 = (np.sum(self.deg[all_i] + self.deg[all_j]) / (m * 2.0)) ** 2
-        di2 = np.sum(self.deg[all_i] ** 2 + self.deg[all_j] ** 2) / (m * 2.0)
-        return (M2 - di1) / (di2 - di1)
+    def plotAdjacencyImage(self, ax, s = [0]):
+        if s[0] == 0:
+            _,s = np.linalg.eig(self.M.astype(float))
+            idx = np.argsort(_)
+            s = np.sign(np.real(s[:,idx[self.n-1]]))
+
+        #print(s)
+        sPos = (s > 0).astype(np.float32).reshape(-1, 1)
+        sNeg = (s < 0).astype(np.float32).reshape(-1, 1)
+        img = (
+            self.A + np.multiply(self.A, 2 * sPos @ sPos.T) - np.multiply(self.A, 2 * sNeg @ sNeg.T)
+        )
+        # sortIdx = np.argsort(s,stable = True)
+        # img = img[sortIdx, :][:, sortIdx]
+        _ = np.zeros((self.n, 1))
+        _[0] = -1
+        _[1] = 0
+        _[2] = 1
+        _[3] = 3
+        cmap = colors.ListedColormap(["blue", "white", "green", "red"])
+        img = np.hstack((img, _))
+        ax.imshow(img, cmap=cmap)
+        ax.set_xlim([-0.5, self.n - 0.5])
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+
+    def plotNetSwitchGraph(self, ax, s=[0], vertex_size=-1, edge_width=0.1):
+        if s[0] == 0:
+            _,s = np.linalg.eig(self.M.astype(float))
+            idx = np.argsort(_)
+            s = np.sign(np.real(s[:,idx[self.n-1]]))
+            
+        if vertex_size == -1:
+            vertex_size = 9600 / self.n
+        #print(s)
+        color = ["red" if i > 0 else "blue" for i in s]
+        Gig = ig.Graph.Adjacency(self.A)
+        edgecolor = [
+            (0, 0.3, 0, 1) if s[i] != s[j] else (0, 0, 0, 0.05)
+            for (i, j) in Gig.get_edgelist()
+        ]
+        edgewidth = [
+            np.log(self.n) * edge_width if s[i] != s[j] else np.log(self.n) * edge_width * 0.5
+            for (i, j) in Gig.get_edgelist()
+        ]
+        im3 = ig.plot(
+            ig.Graph.Adjacency(self.A),
+            vertex_size=np.log(self.deg) * (vertex_size / np.log(self.deg)[0]),
+            edge_width=edgewidth,
+            edge_arrow_size=0,
+            edge_arrow_width=0,
+            layout="circle",
+            target=ax,
+            vertex_color=color,
+            edge_color=edgecolor,
+            vertex_frame_width=0,
+        )
