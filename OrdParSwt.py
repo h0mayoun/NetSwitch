@@ -83,7 +83,7 @@ def plotNetSwitchGraph(G, ax, s, vertex_size=-1, edge_width=0.1):
 
 
 n = 128
-p = np.log2(n) * 1.02 / n
+p = np.log2(n) * 1.1 / n
 kn = 3
 graphtype = "ER"
 if graphtype == "ER":
@@ -101,14 +101,14 @@ elif graphtype == "SBM":
         n=n, pref_matrix=prefMatrix.tolist(), block_sizes=blockSize.tolist()
     )
 
-normalized = True
+normalized = False
 d = np.sort(graph.degree())[::-1]
 numbase = n
 base = np.zeros((n, numbase))
 gap = d[0] - d[-1]
 for i in range(numbase):
     base[:, i] = d - d[-1] - (gap * i) / numbase
-G = NetSwitch(graph, base=base)
+G = NetSwitch(graph)
 # print(base)
 # print(G.deg)
 Dinvsqrt = [1.0 / np.sqrt(G.deg[i]) if G.deg[i] != 0 else 0 for i in range(n)]
@@ -122,12 +122,13 @@ else:
     modularity_limit = np.max(G.base_mod)
 
 I = np.eye(n)
-v2initial, _ = getLk(D_n @ G.M @ D_n, n - 2)
+v2initial, _ = getLk(D_n @ G.M @ D_n, n - 1)
 vl2initial, ul2initial = getLk(I - D_n @ G.A @ D_n, 1)
 v1initial, _ = getLk(G.A, n - 1)
 startTime = time.time()
 switches = 0
-modularity_limit = v2initial
+# modularity_limit,_ = getLk(D_n @ G.M @ D_n, n - 1)
+
 while True:
     print(switches)
     switches += 1
@@ -138,7 +139,7 @@ while True:
         break
 
 I = np.eye(n)
-v2, u2 = getLk(D_n @ G.M @ D_n, n - 2)
+v2, u2 = getLk(D_n @ G.M @ D_n, n - 1)
 v1, _ = getLk(G.A, n - 1)
 
 vl2final, _ = getLk(I - D_n @ G.A @ D_n, 1)

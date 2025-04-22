@@ -15,6 +15,37 @@ class NetSwitch:
         self.countonce = True
         self.checkercount_matrix()
         self.swt_done = 0
+        
+        #-------------------------------------------Modularity Aware Modification---------------------------------------
+        self.M = np.zeros((self.n, self.n))
+        self.m = np.sum(self.deg) / 2
+        self.Dsqrt = np.diag(
+            [
+                1.0 / np.sqrt(self.deg[i]) if self.deg[i] != 0 else 0
+                for i in range(self.n)
+            ]
+        )
+
+        for i in range(self.n):
+            for j in range(self.n):
+                self.M[i, j] = self.A[i, j] - (self.deg[i] * self.deg[j]) / (2 * self.m)
+
+        self.base = np.zeros((self.n, self.n))
+        for u in range(self.n):
+            self.base[:, u] = np.array([-1 if i <= u else 1 for i in range(self.n)])
+            self.base[:, u] = self.base[:, u] / np.linalg.norm(self.base[:, u])
+            
+        self.numbase = self.base.shape[1]
+        
+        self.base_mod_N = np.zeros(self.numbase)
+        for u in range(self.numbase):
+            self.base_mod_N[u] = (
+                self.base[:, u].T @ self.Dsqrt @ self.M @ self.Dsqrt @ self.base[:, u]
+            )
+
+        self.base_mod = np.zeros(self.numbase)
+        for u in range(self.numbase):
+            self.base_mod[u] = self.base[:, u].T @ self.M @ self.base[:, u]
 
     def sort_adj(self):
         sortIdx = np.argsort(-self.deg)
@@ -342,7 +373,41 @@ class NetSwitch:
                         if not cswitch_found:
                             self.N[randi, randj] = 0
                             self.update_Nrow(randi)
-
+                
+                #----------------------------------- Modularity Aware Modification -----------------------------------------#
+                
+                case 'SWPC-MA':
+                    if self.swt_done == 0:
+                        self.org_nl2 = self.l2(normed=True)
+                    cswitch_found = False
+                    while not cswitch_found:
+                        if self.total_checkers() == 0:
+                            break
+                        possible_rowpairs = np.where(self.N>0)
+                        rand_rowpair_idx = np.random.randint(possible_rowpairs[0].size)
+                        randi, randj = possible_rowpairs[0][rand_rowpair_idx], possible_rowpairs[1][rand_rowpair_idx]
+                        all_kls = self.get_all_checkers(randi, randj)
+                        for curk, curl in all_kls:
+                            swt = randi, randj, curk, curl
+                            
+                            #Check Modularity
+                            if min(self.deg[l] - self.deg[k], self.deg[j] - self.deg[i]) == 0 or not self.checkOrdParMod(modularity_limit, swt, normalized=normalized):
+                                continue
+                        
+                            self.switch(swt, update_N=False)
+                            new_nl2 = self.l2(normed=True)
+                            if new_nl2 >= self.org_nl2:
+                                self.update_N(swt)
+                                cswitch_found = True
+                                break
+                            else:
+                                self.switch(swt, update_N=False)
+                        if not cswitch_found:
+                            self.N[randi, randj] = 0
+                            self.update_Nrow(randi)
+                
+                #-----------------------------------------------------------------------------------------------------------#
+                
                 case 'BEST':
                     if self.swt_done == 0:
                         self.B = np.zeros(int(self.n * (self.n-1) / 2))
@@ -489,3 +554,105 @@ class NetSwitch:
     def lev(self):
         eig_val = eigsh(self.A.astype(float), k=1, which='LM', return_eigenvectors=False)[0]
         return eig_val
+    
+    #-------------------------------------------Modularity Aware Modification---------------------------------------
+    def set_Base(self,base):
+        self.base = base
+        self.numbase = self.base.shape[1]
+        for u in range(self.n):
+            self.base[:, u] = self.base[:, u] / np.linalg.norm(self.base[:, u])
+
+        self.base_mod_N = np.zeros(self.numbase)
+        for u in range(self.numbase):
+            self.base_mod_N[u] = (
+                self.base[:, u].T @ self.Dsqrt @ self.M @ self.Dsqrt @ self.base[:, u]
+            )
+
+        self.base_mod = np.zeros(self.numbase)
+        for u in range(self.numbase):
+            self.base_mod[u] = self.base[:, u].T @ self.M @ self.base[:, u]
+    
+    def update_M(swt):
+        i, j, k, l = swt
+        
+        self.M[i, k], self.M[i, l], self.M[j, k], self.M[j, l] = (
+            self.M[i, k] + (1 - 2*self.A[i,k]),
+            self.M[i, l] + (1 - 2*self.A[i,l]),
+            self.M[j, k] + (1 - 2*self.A[j,k]),
+            self.M[j, l] + (1 - 2*self.A[j,l]),
+        )
+        self.M[k, i], self.M[l, i], self.M[k, j], self.M[l, j] = (
+            self.M[k, i] + (1 - 2*self.A[k,i]),
+            self.M[l, i] + (1 - 2*self.A[l,j]),
+            self.M[k, j] + (1 - 2*self.A[k,j]),
+            self.M[l, j] + (1 - 2*self.A[l,j]),
+        )
+        
+        for u in range(self.numbase):
+            self.base_mod_N[u] = (
+                self.base_mod_N[u]
+                + (
+                    self.base[i, u] / np.sqrt(self.deg[i])
+                    - self.base[j, u] / np.sqrt(self.deg[j])
+                )
+                * (
+                    self.base[k, u] / np.sqrt(self.deg[k])
+                    - self.base[l, u] / np.sqrt(self.deg[l])
+                )
+                * 2
+            )
+
+            self.base_mod[u] = (
+                self.base_mod[u]
+                + (self.base[i, u] - self.base[j, u])
+                * (self.base[k, u] - self.base[l, u])
+                * 2
+            )
+        
+    def checkOrdParMod(self, modularity_limit, swt, normalized=True):
+        i, j, k, l = swt
+        for u in range(self.numbase):
+            new_modularity = (
+                self.base_mod[u]
+                + (self.base[i, u] - self.base[j, u])
+                * (self.base[k, u] - self.base[l, u])
+                * 2
+            )
+            new_modularity_N = (
+                self.base_mod_N[u]
+                + (
+                    self.base[i, u] / np.sqrt(self.deg[i])
+                    - self.base[j, u] / np.sqrt(self.deg[j])
+                )
+                * (
+                    self.base[k, u] / np.sqrt(self.deg[k])
+                    - self.base[l, u] / np.sqrt(self.deg[l])
+                )
+                * 2
+            )
+
+            if not normalized and (
+                    new_modularity > self.base_mod[u]
+                    and self.base_mod[u] >= modularity_limit
+                )
+                or (
+                    self.base_mod[u] < modularity_limit
+                    and new_modularity >= modularity_limit
+                )
+            ):
+                return False
+            elif normalized and (
+                (
+                    new_modularity_N > self.base_mod_N[u]
+                    and self.base_mod_N[u] >= modularity_limit
+                )
+                or (
+                    self.base_mod_N[u] < modularity_limit
+                    and new_modularity_N >= modularity_limit
+                )
+            ):
+                return False
+        return True
+        
+        
+    
