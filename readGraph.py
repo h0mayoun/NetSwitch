@@ -2,7 +2,7 @@ import numpy as np
 from scipy.io import mmread
 
 
-def read_Graph(file, n=100, meanDeg = 10):
+def read_Graph(file, n=100, meanDeg=10):
     if file.lower().endswith((".edges")):
         with open(file, "r") as file:
             A = np.zeros((n, n))
@@ -23,14 +23,10 @@ def read_Graph(file, n=100, meanDeg = 10):
                         "constant",
                         constant_values=0,
                     )
-                if u!=v:
+                if u != v:
                     A[u, v] += 1
                     A[v, u] += 1
-                    m+=1
-            threshold = m/(2*n*meanDeg)
-            print(threshold)
-            A = np.array(A>threshold,dtype = np.int8)
-            #print(A)
+                    m += 1
             A = A[:n, :n]
             sortIdx = np.argsort(-np.sum(A, axis=0))
             A = A[sortIdx, :][:, sortIdx]
@@ -38,12 +34,13 @@ def read_Graph(file, n=100, meanDeg = 10):
     elif file.lower().endswith((".mtx")):
         a = mmread(file)
         A = np.array(a.todense())
+        A = np.array(A > 0, dtype=np.int8)
         sortIdx = np.argsort(-np.sum(A, axis=0))
         A = A[sortIdx, :][:, sortIdx]
         return A
 
 
 # read_Graph("email-enron-only.mtx")
-#A = read_Graph("ia-radoslaw-email.edges", n=200)
+# A = read_Graph("ia-radoslaw-email.edges", n=200)
 
-#print(np.sum(A, axis=0))
+# print(np.sum(A, axis=0))

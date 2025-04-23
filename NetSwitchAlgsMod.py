@@ -8,13 +8,14 @@ import random
 import igraph as ig
 from matplotlib import colors
 
+
 class NetSwitch:
 
     def __init__(self, G):
         self.A = np.array(G.get_adjacency().data, dtype=np.int8)
         self.n = np.shape(self.A)[0]
         self.deg = self.degree_seq()
-        self.m = np.sum(self.deg)/2
+        self.m = np.sum(self.deg) / 2
         self.sort_adj()
         self.countonce = True
         self.checkercount_matrix()
@@ -32,14 +33,13 @@ class NetSwitch:
                 for i in range(self.n)
             ]
         )
-
         for i in range(self.n):
             for j in range(self.n):
                 self.M[i, j] = self.A[i, j] - (self.deg[i] * self.deg[j]) / (2 * self.m)
 
-        self.base = np.zeros((self.n, self.n))
-        for u in range(self.n):
-            self.base[:, u] = np.array([-1 if i <= u else 1 for i in range(self.n)])
+        self.base = np.zeros((self.n, self.n + 1))
+        for u in range(self.n + 1):
+            self.base[:, u] = np.array([-1 if i < u else 1 for i in range(self.n)])
             self.base[:, u] = self.base[:, u] / np.linalg.norm(self.base[:, u])
 
         self.numbase = self.base.shape[1]
@@ -53,12 +53,26 @@ class NetSwitch:
         self.base_mod = np.zeros(self.numbase)
         for u in range(self.numbase):
             self.base_mod[u] = self.base[:, u].T @ self.M @ self.base[:, u]
-            
-        modLimApx = np.zeros(self.n)
-        for u in range(self.n):
-            s = np.array([-self.deg[i]/np.sqrt(2*self.m*self.n) if i < u else self.deg[i]/np.sqrt(2*self.m*self.n) for i in range(self.n)]).reshape(1,-1)
-            #print(s)
-            modLimApx[u] = np.mean(self.deg)-np.sum(s.T@s)
+
+        self.base_cut = np.zeros(self.numbase)
+        for u in range(self.numbase):
+            self.base_cut[u] = self.base[:, u].T @ self.laplacian() @ self.base[:, u]
+
+        self.base_cut_N = np.zeros(self.numbase)
+        for u in range(self.numbase):
+            self.base_cut_N[u] = (
+                self.base[:, u].T @ self.normalized_laplacian() @ self.base[:, u]
+            )
+
+        self.M_limit = np.zeros(self.n + 1)
+        for u in range(self.n + 1):
+            s = self.base[:, u].T @ self.deg / np.sqrt(self.m * 2)
+            outCnt = 0
+            for v in range(u):
+                if self.deg[v] >= u:
+                    outCnt += self.deg[v] - u + 1
+
+            self.M_limit[u] = (self.m * 2 - 4 * outCnt) / (self.n) - s * s
 
     def sort_adj(self):
         sortIdx = np.argsort(-self.deg)
@@ -210,6 +224,7 @@ class NetSwitch:
         )
         # ---------------------------------Modularity Aware Modification--------------------------------
         self.update_M(swt)
+
         # ----------------------------------------------------------------------------------------------
         if update_N:
             self.update_N(swt)
@@ -470,41 +485,8 @@ class NetSwitch:
                             self.update_Nrow(randi)
 
                 # ----------------------------------- Modularity Aware Modification -----------------------------------------#
-
-                case "SWMA":
+                case "ModA":
                     if self.swt_done == 0:
-                        self.org_Mlev = self.Mlev(normed=False)
-                    cswitch_found = False
-                    while not cswitch_found:
-                        if self.total_checkers() == 0:
-                            break
-                        possible_rowpairs = np.where(self.N > 0)
-                        rand_rowpair_idx = np.random.randint(possible_rowpairs[0].size)
-                        randi, randj = (
-                            possible_rowpairs[0][rand_rowpair_idx],
-                            possible_rowpairs[1][rand_rowpair_idx],
-                        )
-                        all_kls = self.get_all_checkers(randi, randj)
-                        for curk, curl in all_kls:
-                            swt = randi, randj, curk, curl
-
-                            self.switch(swt, update_N=False)
-                            new_Mlev = self.Mlev(normed=False)
-                            if new_Mlev <= self.org_Mlev:
-                                self.update_N(swt)
-                                cswitch_found = True
-                                print(new_Mlev)
-                                break
-                            else:
-                                self.swt_rejected += 1
-                                self.switch(swt, update_N=False)
-                        if not cswitch_found:
-                            self.N[randi, randj] = 0
-                            self.update_Nrow(randi)
-
-                case "SWOP":
-                    if self.swt_done == 0:
-                        #self.m_limit = max(self.base_mod)
                         self.m_limit = self.MScore(normed=False)
                     cswitch_found = False
                     while not cswitch_found:
@@ -520,13 +502,37 @@ class NetSwitch:
                         for curk, curl in all_kls:
                             swt = randi, randj, curk, curl
 
-                            if not min(
-                                self.deg[curl] - self.deg[curk],
-                                self.deg[randj] - self.deg[randi],
-                            ) == 0 and self.checkOrdParMod(
-                                self.m_limit, swt, normalized=False
-                            ):
+                            if self.checkOrdParMod(self.m_limit, swt, normalized=False):
                                 print(self.swt_done)
+                                self.switch(swt, update_N=False)
+                                self.update_N(swt)
+                                cswitch_found = True
+                                break
+                            else:
+                                self.swt_rejected += 1
+                        if not cswitch_found:
+                            self.N[randi, randj] = 0
+                            self.update_Nrow(randi)
+
+                case "CutA":
+                    if self.swt_done == 0:
+                        # self.c_limit = max(self.base_cut)
+                        self.c_limit = self.L2Score(normed=True)
+                    cswitch_found = False
+                    while not cswitch_found:
+                        if self.total_checkers() == 0:
+                            break
+                        possible_rowpairs = np.where(self.N > 0)
+                        rand_rowpair_idx = np.random.randint(possible_rowpairs[0].size)
+                        randi, randj = (
+                            possible_rowpairs[0][rand_rowpair_idx],
+                            possible_rowpairs[1][rand_rowpair_idx],
+                        )
+                        all_kls = self.get_all_checkers(randi, randj)
+                        for curk, curl in all_kls:
+                            swt = randi, randj, curk, curl
+
+                            if self.checkOrdParCut(self.c_limit, swt, normalized=True):
                                 self.switch(swt, update_N=False)
                                 self.update_N(swt)
                                 cswitch_found = True
@@ -570,15 +576,15 @@ class NetSwitch:
                     raise Exception("Undefined switching algorithm!!!")
 
             # i, j, k, l = swt
-            # print([[self.A[i, k], self.A[i, l]], [self.A[j, k], self.A[j, l]]])
+            # print([[self.A[i, k], self.A[i, l]], [self.A[j, k], self.A[j, l]]])=
             if (
                 not alg == "SWPC"
                 and not alg == "BLOC"
-                and not alg == "SWMA"
-                and not alg == "SWOP"
+                and not alg == "CutA"
+                and not alg == "ModA"
             ):
                 self.switch(swt, update_B=(True if alg == "BEST" else False))
-            if (alg == "SWPC" or alg == "SWMA" or alg == "SWOP") and not cswitch_found:
+            if (alg == "SWPC" or alg == "ModA" or alg == "CutA") and not cswitch_found:
                 self.swt_done -= 1
             self.swt_done += 1
             swt_num += 1
@@ -691,19 +697,19 @@ class NetSwitch:
         return np.diag(self.deg) - self.A
 
     def normalized_laplacian(self):
-        Dm05 = np.diag([1 / np.sqrt(self.deg[i]) if self.deg[i]!=0 else 0 for i in range(self.n)])
+        Dm05 = np.diag(
+            [1 / np.sqrt(self.deg[i]) if self.deg[i] != 0 else 0 for i in range(self.n)]
+        )
         return np.matmul(np.matmul(Dm05, self.laplacian()), Dm05)
-    
-    def normalized_adjacency(self):
-        Dm05 = np.diag([1 / np.sqrt(self.deg[i]) if self.deg[i]!=0 else 0 for i in range(self.n)])
-        return np.eye(self.n) - Dm05 @ self.A @ Dm05
-    
+
     def normalized_modularity(self):
-        Dm05 = np.diag([1 / np.sqrt(self.deg[i]) if self.deg[i]!=0 else 0 for i in range(self.n)])
+        Dm05 = np.diag(
+            [1 / np.sqrt(self.deg[i]) if self.deg[i] != 0 else 0 for i in range(self.n)]
+        )
         return Dm05 @ self.M @ Dm05
 
-    def l2(self, normed=True):
-        try:
+    def l2(self, normed=True, fast=True):
+        if fast:
             if normed:
                 eig_vals = eigsh(
                     self.normalized_laplacian(),
@@ -715,36 +721,52 @@ class NetSwitch:
                 eig_vals = eigsh(
                     self.laplacian(), k=2, which="SM", return_eigenvectors=False
                 )
-            return max(eig_vals)
-        except:
+            eig_val = max(eig_vals)
+        else:
             if normed:
-                eigVal, _ = np.linalg.eig(self.normalized_laplacian())
-                idx = np.argsort(eigVal)
-                return eigVal[idx[1]]
+                eig_val = np.linalg.eigvals(self.normalized_laplacian())
+                idx = np.argsort(eig_val)
+                eig_val = eig_val[idx[1]]
             else:
-                eigVal, _ = np.linalg.eig(self.laplacian())
-                idx = np.argsort(eigVal)
-                return eigVal[idx[1]]
-
-    def lev(self):
-        eig_val = eigsh(
-            self.A.astype(float), k=1, which="LM", return_eigenvectors=False
-        )[0]
+                eig_val = np.linalg.eigvals(self.laplacian())
+                idx = np.argsort(eig_val)
+                eig_val = eig_val[idx[1]]
         return eig_val
 
-    def Mlev(self, normed=True):
-        if normed:
+    def lev(self, fast=True):
+        if fast:
             eig_val = eigsh(
-                self.normalized_modularity().astype(float), k=1, which="LA", return_eigenvectors=False
+                self.A.astype(float), k=1, which="LM", return_eigenvectors=False
             )[0]
         else:
-            eig_val = eigsh(
-                self.M.astype(float), k=1, which="LA", return_eigenvectors=False
-            )[0]
-
+            eig_val = np.linalg.eigvals(self.A.astype(float))
+            idx = np.argsort(eig_val)
+            eig_val = eig_val[idx[self.n - 1]]
         return eig_val
 
-    
+    def Mlev(self, normed=True, fast=True):
+        if fast:
+            if normed:
+                eig_val = eigsh(
+                    self.normalized_modularity().astype(float),
+                    k=1,
+                    which="LA",
+                    return_eigenvectors=False,
+                )[0]
+            else:
+                eig_val = eigsh(
+                    self.M.astype(float), k=1, which="LA", return_eigenvectors=False
+                )[0]
+        else:
+            if normed:
+                eig_val = np.linalg.eigvals(self.normalized_modularity().astype(float))
+                idx = np.argsort(eig_val)
+                eig_val = eig_val[idx[self.n - 1]]
+            else:
+                eig_val = np.linalg.eigvals(self.M.astype(float))
+                idx = np.argsort(eig_val)
+                eig_val = eig_val[idx[self.n - 1]]
+        return eig_val
 
     # -------------------------------------------Modularity Aware Modification---------------------------------------
     def MScore(self, normed=True):
@@ -753,9 +775,24 @@ class NetSwitch:
         else:
             eig_val, eig_vec = np.linalg.eig(self.M.astype(float))
         idx = np.argsort(eig_val)
-        eig_vec = np.sign(eig_vec[:,idx[self.n-1]].reshape(-1,1)) / np.sqrt(self.n)
-        return (eig_vec.T @ self.M @ eig_vec)[0, 0]
-        
+        eig_vec = np.sign(eig_vec[:, idx[self.n - 1]].reshape(-1, 1)) / np.sqrt(self.n)
+        if normed:
+            return (eig_vec.T @ self.normalized_modularity() @ eig_vec)[0, 0]
+        else:
+            return (eig_vec.T @ self.M @ eig_vec)[0, 0]
+
+    def L2Score(self, normed=True):
+        if normed:
+            eig_val, eig_vec = np.linalg.eig(self.normalized_laplacian().astype(float))
+        else:
+            eig_val, eig_vec = np.linalg.eig(self.laplacian().astype(float))
+        idx = np.argsort(eig_val)
+        eig_vec = np.sign(eig_vec[:, idx[1]].reshape(-1, 1)) / np.sqrt(self.n)
+        if normed:
+            return (eig_vec.T @ self.normalized_laplacian() @ eig_vec)[0, 0]
+        else:
+            return (eig_vec.T @ self.laplacian() @ eig_vec)[0, 0]
+
     def set_Base(self, base):
         self.base = base
         self.numbase = self.base.shape[1]
@@ -809,6 +846,26 @@ class NetSwitch:
                 * 2
             )
 
+            self.base_cut_N[u] = (
+                self.base_cut_N[u]
+                - (
+                    self.base[i, u] / np.sqrt(self.deg[i])
+                    - self.base[j, u] / np.sqrt(self.deg[j])
+                )
+                * (
+                    self.base[k, u] / np.sqrt(self.deg[k])
+                    - self.base[l, u] / np.sqrt(self.deg[l])
+                )
+                * 2
+            )
+
+            self.base_cut[u] = (
+                self.base_cut[u]
+                - (self.base[i, u] - self.base[j, u])
+                * (self.base[k, u] - self.base[l, u])
+                * 2
+            )
+
     def checkOrdParMod(self, modularity_limit, swt, normalized=True):
         i, j, k, l = swt
         for u in range(self.numbase):
@@ -840,6 +897,10 @@ class NetSwitch:
                     self.base_mod[u] < modularity_limit
                     and new_modularity >= modularity_limit
                 )
+                or (
+                    self.base_mod[u] < self.M_limit[u]
+                    and new_modularity >= self.M_limit[u]
+                )
             ):
                 return False
             elif normalized and (
@@ -854,19 +915,19 @@ class NetSwitch:
             ):
                 return False
         return True
-    
-    def checkOrdParModNew(self, modularity_limit, swt, normalized=True):
+
+    def checkOrdParCut(self, cut_limit, swt, normalized=True):
         i, j, k, l = swt
         for u in range(self.numbase):
-            new_modularity = (
-                self.base_mod[u]
-                + (self.base[i, u] - self.base[j, u])
+            new_cut = (
+                self.base_cut[u]
+                - (self.base[i, u] - self.base[j, u])
                 * (self.base[k, u] - self.base[l, u])
                 * 2
             )
-            new_modularity_N = (
-                self.base_mod_N[u]
-                + (
+            new_cut_N = (
+                self.base_cut_N[u]
+                - (
                     self.base[i, u] / np.sqrt(self.deg[i])
                     - self.base[j, u] / np.sqrt(self.deg[j])
                 )
@@ -876,42 +937,34 @@ class NetSwitch:
                 )
                 * 2
             )
+            if (
+                not normalized
+                and (new_cut < self.base_cut[u] and self.base_cut[u] <= cut_limit)
+                or (self.base_cut[u] > cut_limit and new_cut <= cut_limit)
+            ):
+                return False
+            elif (
+                normalized
+                and (new_cut_N < self.base_cut_N[u] and self.base_cut_N[u] <= cut_limit)
+                or (self.base_cut_N[u] > cut_limit and new_cut_N <= cut_limit)
+            ):
+                return False
 
-            if not normalized and (
-                (
-                    new_modularity > self.base_mod[u]
-                    and self.base_mod[u] >= modularity_limit
-                )
-                or (
-                    self.base_mod[u] < modularity_limit
-                    and new_modularity >= modularity_limit
-                )
-            ):
-                return False
-            elif normalized and (
-                (
-                    new_modularity_N > self.base_mod_N[u]
-                    and self.base_mod_N[u] >= modularity_limit
-                )
-                or (
-                    self.base_mod_N[u] < modularity_limit
-                    and new_modularity_N >= modularity_limit
-                )
-            ):
-                return False
         return True
 
-    def plotAdjacencyImage(self, ax, s = [0]):
+    def plotAdjacencyImage(self, ax, s=[0]):
         if s[0] == 0:
-            _,s = np.linalg.eig(self.M.astype(float))
+            _, s = np.linalg.eig(self.M.astype(float))
             idx = np.argsort(_)
-            s = np.sign(np.real(s[:,idx[self.n-1]]))
+            s = np.sign(np.real(s[:, idx[self.n - 1]]))
 
-        #print(s)
+        # print(s)
         sPos = (s > 0).astype(np.float32).reshape(-1, 1)
         sNeg = (s < 0).astype(np.float32).reshape(-1, 1)
         img = (
-            self.A + np.multiply(self.A, 2 * sPos @ sPos.T) - np.multiply(self.A, 2 * sNeg @ sNeg.T)
+            self.A
+            + np.multiply(self.A, 2 * sPos @ sPos.T)
+            - np.multiply(self.A, 2 * sNeg @ sNeg.T)
         )
         # sortIdx = np.argsort(s,stable = True)
         # img = img[sortIdx, :][:, sortIdx]
@@ -927,16 +980,15 @@ class NetSwitch:
         ax.set_xticks([])
         ax.set_yticks([])
 
-
     def plotNetSwitchGraph(self, ax, s=[0], vertex_size=-1, edge_width=0.1):
         if s[0] == 0:
-            _,s = np.linalg.eig(self.M.astype(float))
+            _, s = np.linalg.eig(self.M.astype(float))
             idx = np.argsort(_)
-            s = np.sign(np.real(s[:,idx[self.n-1]]))
-            
+            s = np.sign(np.real(s[:, idx[self.n - 1]]))
+
         if vertex_size == -1:
-            vertex_size = 9600 / self.n
-        #print(s)
+            vertex_size = 8000 / self.n
+        # print(s)
         color = ["red" if i > 0 else "blue" for i in s]
         Gig = ig.Graph.Adjacency(self.A)
         edgecolor = [
@@ -944,12 +996,16 @@ class NetSwitch:
             for (i, j) in Gig.get_edgelist()
         ]
         edgewidth = [
-            np.log(self.n) * edge_width if s[i] != s[j] else np.log(self.n) * edge_width * 0.5
+            (
+                np.log(self.n) * edge_width
+                if s[i] != s[j]
+                else np.log(self.n) * edge_width * 0.5
+            )
             for (i, j) in Gig.get_edgelist()
         ]
         im3 = ig.plot(
             ig.Graph.Adjacency(self.A),
-            vertex_size=np.log(self.deg) * (vertex_size / np.log(self.deg)[0]),
+            vertex_size=np.log2(self.deg) * (vertex_size / np.log2(self.deg)[0]),
             edge_width=edgewidth,
             edge_arrow_size=0,
             edge_arrow_width=0,
