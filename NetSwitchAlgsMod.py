@@ -64,7 +64,8 @@ class NetSwitch:
                 self.base[:, u].T @ self.normalized_laplacian() @ self.base[:, u]
             )
 
-        self.M_limit = np.zeros(self.n + 1)
+        self.M_ub = np.zeros(self.n + 1)
+        self.M_lb = np.zeros(self.n + 1)
         for u in range(self.n + 1):
             s = self.base[:, u].T @ self.deg / np.sqrt(self.m * 2)
             outCnt = 0
@@ -72,7 +73,13 @@ class NetSwitch:
                 if self.deg[v] >= u:
                     outCnt += self.deg[v] - u + 1
 
-            self.M_limit[u] = (self.m * 2 - 4 * outCnt) / (self.n) - s * s
+            self.M_ub[u] = (self.m * 2 - 4 * outCnt) / (self.n) - s * s
+
+            outCnt = 0
+            for v in range(u):
+                outCnt = min(sum(self.deg[:u]), sum(self.deg[u:]))
+
+            self.M_lb[u] = (self.m * 2 - 4 * outCnt) / (self.n) - s * s
 
     def sort_adj(self):
         sortIdx = np.argsort(-self.deg)
@@ -485,6 +492,35 @@ class NetSwitch:
                             self.update_Nrow(randi)
 
                 # ----------------------------------- Modularity Aware Modification -----------------------------------------#
+                case "ModA-G":
+                    if self.swt_done == 0:
+                        self.m_limit = self.MScore(normed=False)
+                    cswitch_found = False
+                    while not cswitch_found:
+                        if self.total_checkers() == 0:
+                            break
+                        possible_rowpairs = np.where(self.N > 0)
+                        rand_rowpair_idx = np.random.randint(possible_rowpairs[0].size)
+                        randi, randj = (
+                            possible_rowpairs[0][rand_rowpair_idx],
+                            possible_rowpairs[1][rand_rowpair_idx],
+                        )
+                        all_kls = self.get_all_checkers(randi, randj)
+                        for curk, curl in all_kls:
+                            swt = randi, randj, curk, curl
+                            swt = self.expandSwitchModA(swt, normalized=False)
+                            if self.checkOrdParMod(self.m_limit, swt, normalized=False):
+                                print(self.swt_done)
+                                self.switch(swt, update_N=False)
+                                self.update_N(swt)
+                                cswitch_found = True
+                                break
+                            else:
+                                self.swt_rejected += 1
+                        if not cswitch_found:
+                            self.N[randi, randj] = 0
+                            self.update_Nrow(randi)
+
                 case "ModA":
                     if self.swt_done == 0:
                         self.m_limit = self.MScore(normed=False)
@@ -582,9 +618,12 @@ class NetSwitch:
                 and not alg == "BLOC"
                 and not alg == "CutA"
                 and not alg == "ModA"
+                and not alg == "ModA-G"
             ):
                 self.switch(swt, update_B=(True if alg == "BEST" else False))
-            if (alg == "SWPC" or alg == "ModA" or alg == "CutA") and not cswitch_found:
+            if (
+                alg == "SWPC" or alg == "ModA" or alg == "CutA" or alg == "ModA-G"
+            ) and not cswitch_found:
                 self.swt_done -= 1
             self.swt_done += 1
             swt_num += 1
@@ -897,10 +936,8 @@ class NetSwitch:
                     self.base_mod[u] < modularity_limit
                     and new_modularity >= modularity_limit
                 )
-                or (
-                    self.base_mod[u] < self.M_limit[u]
-                    and new_modularity >= self.M_limit[u]
-                )
+                or (self.base_mod[u] < self.M_ub[u] and new_modularity >= self.M_ub[u])
+                # m_ratio
             ):
                 return False
             elif normalized and (
@@ -1015,3 +1052,30 @@ class NetSwitch:
             edge_color=edgecolor,
             vertex_frame_width=0,
         )
+
+    def expandSwitchModA(self, swt, normalized=True):
+        i, j, k, l = swt
+        search_block = 0
+        bestswt = (i, j, k, l)
+
+        while True:
+            new_k, new_l = self.largest_kl(i, j)
+            if new_k == k and new_l == l:
+                search_block += 1
+                if search_block == 2:
+                    break
+            else:
+                k, l = new_k, new_l
+                search_block = 0
+            new_i, new_j = self.largest_ij(k, l)
+            if new_i == i and new_j == j:
+                search_block += 1
+                if search_block == 2:
+                    break
+            else:
+                i, j = new_i, new_j
+                search_block = 0
+            if self.checkOrdParMod(self.m_limit, (i, j, k, l), normalized=normalized):
+                bestswt = (i, j, k, l)
+
+        return bestswt

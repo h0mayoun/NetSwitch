@@ -1,259 +1,194 @@
+from NetSwitchAlgsMod import *
+import pickle
 import random
-import numpy as np
 import igraph as ig
 import matplotlib.pyplot as plt
+import numpy as np
 from matplotlib import colors
-from NetSwitchAlgsMod import NetSwitch
-import csv
-import sys
-import matplotlib.animation as animation
+import copy
 import os
-import time
+from scipy.io import mmread, mmwrite
+from readGraph import read_Graph
 
-seed = 2
-random.seed(seed)
+seed1 = 1
+seed2 = 1
 np.set_printoptions(precision=2, suppress=True, linewidth=np.inf)
 
+np.random.seed(seed1)
+random.seed(seed2)
 
-def getLk(M, k):
-    # get the list of eigenvalue eigenvector sorted ascendingly
-    eigVal, eigVec = np.linalg.eig(M)
-    idx = eigVal.argsort()
-    eigVal = eigVal[idx]
-    eigVec = eigVec[:, idx]
-    return eigVal[k], eigVec[:, k]
+file = [
+    "email-enron-only.mtx",
+    "reptilia-tortoise-network-bsv.edges",
+    "inf-USAir97.mtx",
+    "aves-wildbird-network.edges",
+    "ca-netscience.mtx",
+    "ia-radoslaw-email.edges",
+]
+
+# n = 256
+# p = np.log2(n) * 1.1 / n
+# kn = 4
+# graphtype = "BA"
+# if graphtype == "ER":
+#     graph = ig.Graph.Erdos_Renyi(n=n, p=p)
+#     graph_des = "ER-n={}-p={:.2e}-seed=({},{})".format(n, p, seed1, seed2)
+# elif graphtype == "BA":
+#     graph = ig.Graph.Barabasi(n=n, m=kn)
+#     graph_des = "BA-n={}-k={}-seed=({},{})".format(n, kn, seed1, seed2)
+# S = NetSwitch(graph)
+
+filenum = 1
+A = read_Graph("graphs/" + file[filenum])
+S = NetSwitch(ig.Graph.Adjacency(A))
+graph_des = file[filenum]
+
+# A = read_Graph("graphs/reptilia-tortoise-network-bsv.edges")
+# S = NetSwitch(ig.Graph.Adjacency(A))
+
+# A = read_Graph("graphs/inf-USAir97.mtx")
+# S = NetSwitch(ig.Graph.Adjacency(A))
+# A = read_Graph("graphs/ia-radoslaw-email.edges",meanDeg=20)
+# S = NetSwitch(ig.Graph.Adjacency(A))
+# print(np.sum(A)/S.n)
+# fig, ax = plt.subplots(2, 2, figsize=(3, 3))
+# S.plotAdjacencyImage(ax[0,0])
+# plt.savefig("img.png",dpi=1000)
+# #print(A)
+# 0/0
+# fig, ax = plt.subplots(2, 3, figsize=(9, 3))
+# S.plotAdjacencyImage(ax[0,0])
+# S.plotNetSwitchGraph(ax[0,1])
+# ax[0,1].axis('equal')
+# ax[0,2].plot(S.base_mod)
+# modAprx = np.zeros(S.n)
+# degVec = S.deg.reshape(1, -1)
+# for u in range(1, S.n):
+#     s = np.array(
+#         [
+#             (
+#                 -S.deg[i] / np.sqrt(2 * S.m * S.n)
+#                 if i < u
+#                 else S.deg[i] / np.sqrt(2 * S.m * S.n)
+#             )
+#             for i in range(S.n)
+#         ]
+#     ).reshape(1, -1)
+#     modAprx[u] = np.mean(degVec) - np.sum(s.T @ s)
+# fig, ax = plt.subplots(2, 3, figsize=(9, 9))
+# S.switch_A(alg="GRDY")
+# S.plotAdjacencyImage(ax[1, 0])
+# S.plotNetSwitchGraph(ax[1, 1])
+# ax[1, 1].axis("equal")
+# ax[1, 2].plot(S.base_mod)
+# ax[1, 2].plot(modAprx)
+# ax[1, 2].plot(S.M_limit)
+
+# plt.savefig("test.png", dpi=1000)
+# 0 / 0
+fig = plt.figure(figsize=(9, 9))
+plt.suptitle(graph_des)
+ax1, ax2, ax3 = (
+    fig.add_subplot(3, 3, 1),
+    fig.add_subplot(3, 3, 3),
+    fig.add_subplot(3, 3, 4),
+)
+S.plotAdjacencyImage(ax1)
+S.plotNetSwitchGraph(ax2)
+ax3.plot(S.base_mod)
+ax2.axis("equal")
 
 
-def getParVec(G, D_n):
-    v2, u2 = getLk(I - D_n @ G.A @ D_n, 1)
-    s = np.sign(u2)
-    return s
-
-
-def plotAdjacencyImage(G, ax, s):
-    n = G.n
-    I = np.eye(n)
-
-    sPos = (s > 0).astype(np.float32).reshape(-1, 1)
-    sNeg = (s < 0).astype(np.float32).reshape(-1, 1)
-    img = (
-        G.A + np.multiply(G.A, 2 * sPos @ sPos.T) - np.multiply(G.A, 2 * sNeg @ sNeg.T)
+data = [
+    (
+        S.swt_done,
+        S.lev(fast=False),
+        S.l2(normed=True, fast=False),
+        S.Mlev(normed=False, fast=False),
+        S.MScore(normed=False),
+        S.L2Score(normed=True),
     )
-    # sortIdx = np.argsort(s,stable = True)
-    # img = img[sortIdx, :][:, sortIdx]
-    _ = np.zeros((n, 1))
-    _[0] = -1
-    _[1] = 0
-    _[2] = 1
-    _[3] = 3
-    cmap = colors.ListedColormap(["blue", "white", "green", "red"])
-    img = np.hstack((img, _))
-    ax.imshow(img, cmap=cmap)
-    ax.set_xlim([-0.5, n - 0.5])
-    ax.set_xticks([])
-    ax.set_yticks([])
-
-
-def plotNetSwitchGraph(G, ax, s, vertex_size=-1, edge_width=0.1):
-    if vertex_size == -1:
-        vertex_size = 9600 / G.n
-
-    color = ["red" if i > 0 else "blue" for i in s]
-    Gig = ig.Graph.Adjacency(G.A)
-    edgecolor = [
-        (0, 0.3, 0, 1) if s[i] != s[j] else (0, 0, 0, 0.05)
-        for (i, j) in Gig.get_edgelist()
-    ]
-    edgewidth = [
-        np.log(n) * edge_width if s[i] != s[j] else np.log(n) * edge_width * 0.5
-        for (i, j) in Gig.get_edgelist()
-    ]
-    im3 = ig.plot(
-        ig.Graph.Adjacency(G.A),
-        vertex_size=np.log(G.deg) * (vertex_size / np.log(G.deg)[0]),
-        edge_width=edgewidth,
-        edge_arrow_size=0,
-        edge_arrow_width=0,
-        layout="circle",
-        target=ax,
-        vertex_color=color,
-        edge_color=edgecolor,
-        vertex_frame_width=0,
-    )
-
-
-n = 128
-p = np.log2(n) * 1.1 / n
-kn = 3
-graphtype = "ER"
-if graphtype == "ER":
-    graph = ig.Graph.Erdos_Renyi(n=n, p=p)
-elif graphtype == "BA":
-    graph = ig.Graph.Barabasi(n=n, m=kn)
-elif graphtype == "WS":
-    graph = ig.Graph.Watts_Strogatz(dim=1, size=n, nei=kn, p=p)
-elif graphtype == "SBM":
-    blockSize = np.ones(kn, dtype=np.int64) * np.int64(n / kn)
-    blockSize[0] += n - sum(blockSize)
-    prefMatrix = np.ones((1, kn)) * (1 / kn)  # np.random.rand(1,kn)
-    prefMatrix = prefMatrix.T @ prefMatrix
-    graph = ig.Graph.SBM(
-        n=n, pref_matrix=prefMatrix.tolist(), block_sizes=blockSize.tolist()
-    )
-
-normalized = False
-d = np.sort(graph.degree())[::-1]
-numbase = n
-base = np.zeros((n, numbase))
-gap = d[0] - d[-1]
-for i in range(numbase):
-    base[:, i] = d - d[-1] - (gap * i) / numbase
-G = NetSwitch(graph)
-# print(base)
-# print(G.deg)
-Dinvsqrt = [1.0 / np.sqrt(G.deg[i]) if G.deg[i] != 0 else 0 for i in range(n)]
-D_n = np.diag(Dinvsqrt)
-A_n = D_n @ G.A @ D_n
-m = sum(G.deg) / 2
-
-if normalized:
-    modularity_limit = np.max(G.base_mod_N)
-else:
-    modularity_limit = np.max(G.base_mod)
-
-I = np.eye(n)
-v2initial, _ = getLk(D_n @ G.M @ D_n, n - 1)
-vl2initial, ul2initial = getLk(I - D_n @ G.A @ D_n, 1)
-v1initial, _ = getLk(G.A, n - 1)
-startTime = time.time()
-switches = 0
-# modularity_limit,_ = getLk(D_n @ G.M @ D_n, n - 1)
-
+]
+alg = "ModA-G"
 while True:
-    print(switches)
-    switches += 1
+    swt_num = S.switch_A(alg=alg, count=250)
+    data.append(
+        (
+            S.swt_done,
+            S.lev(fast=False),
+            S.l2(normed=True, fast=False),
+            S.Mlev(normed=False, fast=False),
+            S.MScore(normed=False),
+            S.L2Score(normed=True),
+        )
+    )
 
-    swt = G.modAwareSwitch(modularity_limit, normalized=normalized)
+    if not os.path.exists("result/{}/{}/".format(graph_des, alg)):
+        os.makedirs("result/{}/{}/".format(graph_des, alg))
 
-    if swt == (-1, -1, -1, -1):
+    mmwrite("result/{}/{}/{}.mtx".format(graph_des, alg, S.swt_done), S.A)
+    print(S.swt_done)
+    if swt_num != -1:
         break
 
-I = np.eye(n)
-v2, u2 = getLk(D_n @ G.M @ D_n, n - 1)
-v1, _ = getLk(G.A, n - 1)
+print("did ", (S.swt_done), " switches")
+print("rejected ", (S.swt_rejected), " switches")
 
-vl2final, _ = getLk(I - D_n @ G.A @ D_n, 1)
-totalTime = time.time() - startTime
-print(str(switches) + " switches in " + str(totalTime) + " (s)")
-fig, ax = plt.subplots(1, 2, figsize=(10, 5))
-if graphtype == "ER":
-    st = fig.suptitle(
-        "ER; n:"
-        + str(n)
-        + "; p:"
-        + str(np.round(p, 2))
-        + "; seed:"
-        + str(seed)
-        + "\nl2Binitial:"
-        + str(np.round(v2initial, 2))
-        + "; l2Bfinal:"
-        + str(np.round(v2, 2))
-        + "\nl1Ainitial:"
-        + str(np.round(v1initial, 2))
-        + "; l1Afinal:"
-        + str(np.round(v1, 2))
-        + "\nl2Linitial:"
-        + str(np.round(vl2initial, 2))
-        + "; l2Lfinal:"
-        + str(np.round(vl2final, 2))
-        + "\n switches:"
-        + str(switches)
-        + "; time(s):"
-        + str(np.round(totalTime, 2)),
-        fontsize="x-large",
-    )
-elif graphtype == "BA":
-    st = fig.suptitle(
-        "BA; n:"
-        + str(n)
-        + "; p:"
-        + str(kn)
-        + "; seed:"
-        + str(seed)
-        + "\nl2initial:"
-        + str(np.round(v2initial, 2))
-        + "; l2final:"
-        + str(np.round(v2, 2))
-        + "\nl1initial:"
-        + str(np.round(v1initial, 2))
-        + "; l1final:"
-        + str(np.round(v1, 2))
-        + "\nl2Linitial:"
-        + str(np.round(vl2initial, 2))
-        + "; l2Lfinal:"
-        + str(np.round(vl2final, 2))
-        + "\n switches:"
-        + str(switches)
-        + "; time(s):"
-        + str(np.round(totalTime, 2)),
-        fontsize="x-large",
-    )
-elif graphtype == "WS":
-    st = fig.suptitle(
-        "WS; n:"
-        + str(n)
-        + "; k:"
-        + str(kn)
-        + "; p:"
-        + str(np.round(p, 2))
-        + "; seed:"
-        + str(seed)
-        + "\nl2initial:"
-        + str(np.round(v2initial, 2))
-        + "; l2final:"
-        + str(np.round(v2[1], 2))
-        + "\nl1initial:"
-        + str(np.round(v1initial, 2))
-        + "; l1final:"
-        + str(np.round(v1, 2))
-        + "\nl2Linitial:"
-        + str(np.round(vl2initial, 2))
-        + "; l2Lfinal:"
-        + str(np.round(vl2final, 2))
-        + "\n switches:"
-        + str(switches)
-        + "; time(s):"
-        + str(np.round(totalTime, 2)),
-        fontsize="x-large",
-    )
-elif graphtype == "SBM":
-    st = fig.suptitle(
-        "SBM; n:"
-        + str(n)
-        + "; k:"
-        + str(kn)
-        + "; seed:"
-        + str(seed)
-        + "\nl2initial:"
-        + str(np.round(v2initial, 2))
-        + "; l2final:"
-        + str(np.round(v2[1], 2))
-        + "\nl1initial:"
-        + str(np.round(v1initial, 2))
-        + "; l1final:"
-        + str(np.round(v1, 2))
-        + "\n switches:"
-        + str(switches)
-        + "; time(s):"
-        + str(np.round(totalTime, 2)),
-        fontsize="x-large",
-    )
-s = getParVec(G, D_n)
-plotAdjacencyImage(G, ax[0], s)
-plotNetSwitchGraph(G, ax[1], s)
-# ax[2].bar(np.arange(1,G.n+1),G.deg,color = ["red" if i>0 else "blue" for i in s])
-# ax[2].set_xlim([0,n])
-ax[1].set_aspect("equal", adjustable="box")
+ax4, ax5, ax6 = (
+    fig.add_subplot(3, 3, 2),
+    fig.add_subplot(3, 3, 6),
+    fig.add_subplot(3, 3, 5),
+)
+S.plotAdjacencyImage(ax4)
+S.plotNetSwitchGraph(ax5)
+ax6.plot(S.base_mod)
+ax6.plot(S.M_ub)
+ax6.plot(S.M_lb)
+ax5.axis("equal")
+
+
+ax7 = fig.add_subplot(3, 1, 3)
+ax7.plot(
+    [i[0] for i in data],
+    [100 * (i[1] / data[0][1] - 1) for i in data],
+    label="lev",
+    color="tab:blue",
+)
+# ax7.plot(
+#     [i[0] for i in data],
+#     [100 * (i[2] / data[0][2] - 1) for i in data],
+#     label="l2",
+#     color="tab:orange",
+# )
+# ax7.plot(
+#     [i[0] for i in data],
+#     [100 * (i[5] / data[0][5] - 1) for i in data],
+#     label="L2S",
+#     ls="--",
+#     color="tab:orange",
+# )
+ax7.plot(
+    [i[0] for i in data],
+    [100 * (i[3] / data[0][3] - 1) for i in data],
+    label="Mlev",
+    color="tab:green",
+)
+ax7.plot(
+    [i[0] for i in data],
+    [100 * (i[4] / data[0][4] - 1) for i in data],
+    label="MS",
+    ls="--",
+    color="tab:green",
+)
+ax7.plot([0, S.swt_done], [0, 0], label="", color="k", linestyle=":")
+ax7.legend()
 num = len(os.listdir("image"))
-fig.tight_layout()
 plt.savefig("image/" + str(num + 1), dpi=1000)
+# plt.subplot(1, 3, 3)
+# plt.imshow(S.A, cmap=cmap)
+# plt.tight_layout()
+# # plt.show()
+# plt.savefig("image/" + str(num + 1), dpi=1000)
+# result[pos_p].append((S.swt_done, S.assortativity_coeff(), S.total_checkers()))
+# if s_no > 0 and s_no % 10000 == 0:
+# print(s_no, 'switches with p =', pos_p)

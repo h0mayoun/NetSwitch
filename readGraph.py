@@ -1,6 +1,8 @@
 import numpy as np
 from scipy.io import mmread
 
+import scipy.sparse
+
 
 def read_Graph(file, n=100, meanDeg=10):
     if file.lower().endswith((".edges")):
@@ -24,16 +26,17 @@ def read_Graph(file, n=100, meanDeg=10):
                         constant_values=0,
                     )
                 if u != v:
-                    A[u, v] += 1
-                    A[v, u] += 1
+                    A[u, v] = 1
+                    A[v, u] = 1
                     m += 1
             A = A[:n, :n]
             sortIdx = np.argsort(-np.sum(A, axis=0))
             A = A[sortIdx, :][:, sortIdx]
             return A
     elif file.lower().endswith((".mtx")):
-        a = mmread(file)
-        A = np.array(a.todense())
+        A = mmread(file)
+        if scipy.sparse.issparse(A):
+            A = np.array(A.todense())
         A = np.array(A > 0, dtype=np.int8)
         sortIdx = np.argsort(-np.sum(A, axis=0))
         A = A[sortIdx, :][:, sortIdx]
