@@ -24,6 +24,8 @@ file = [
     "aves-wildbird-network.edges",
     "ca-netscience.mtx",
     "ia-radoslaw-email.edges",
+    "ca-CSphd.mtx",
+    "ca-GrQc.mtx",
 ]
 
 # n = 256
@@ -38,11 +40,10 @@ file = [
 #     graph_des = "BA-n={}-k={}-seed=({},{})".format(n, kn, seed1, seed2)
 # S = NetSwitch(graph)
 
-filenum = 1
+filenum = 4
 A = read_Graph("graphs/" + file[filenum])
 S = NetSwitch(ig.Graph.Adjacency(A))
 graph_des = file[filenum]
-
 # A = read_Graph("graphs/reptilia-tortoise-network-bsv.edges")
 # S = NetSwitch(ig.Graph.Adjacency(A))
 
@@ -109,9 +110,9 @@ data = [
         S.L2Score(normed=True),
     )
 ]
-alg = "ModA-G"
+alg = "GRDY"
 while True:
-    swt_num = S.switch_A(alg=alg, count=250)
+    swt_num = S.switch_A(alg=alg, count=1000)
     data.append(
         (
             S.swt_done,

@@ -11,7 +11,7 @@ from matplotlib import colors
 
 class NetSwitch:
 
-    def __init__(self, G):
+    def __init__(self, G,base = None):
         self.A = np.array(G.get_adjacency().data, dtype=np.int8)
         self.n = np.shape(self.A)[0]
         self.deg = self.degree_seq()
@@ -21,6 +21,11 @@ class NetSwitch:
         self.checkercount_matrix()
         self.swt_done = 0
 
+        self.lapMat = None
+        self.lapMat_N = None
+        self.modMat = None
+        self.modMat_N = None
+        
         # -------------------------------------------Modularity Aware Modification---------------------------------------
 
         self.swt_rejected = 0
@@ -36,14 +41,17 @@ class NetSwitch:
         for i in range(self.n):
             for j in range(self.n):
                 self.M[i, j] = self.A[i, j] - (self.deg[i] * self.deg[j]) / (2 * self.m)
-
-        self.base = np.zeros((self.n, self.n + 1))
-        for u in range(self.n + 1):
-            self.base[:, u] = np.array([-1 if i < u else 1 for i in range(self.n)])
-            self.base[:, u] = self.base[:, u] / np.linalg.norm(self.base[:, u])
-
+               
+        if base == None:
+            self.base = np.zeros((self.n, self.n + 1))
+            for u in range(self.n + 1):
+                self.base[:, u] = np.array([-1 if i < u else 1 for i in range(self.n)])
+                self.base[:, u] = self.base[:, u] / np.linalg.norm(self.base[:, u])
+        else:
+            self.set_Base(base)
+            
         self.numbase = self.base.shape[1]
-
+        
         self.base_mod_N = np.zeros(self.numbase)
         for u in range(self.numbase):
             self.base_mod_N[u] = (
@@ -63,9 +71,10 @@ class NetSwitch:
             self.base_cut_N[u] = (
                 self.base[:, u].T @ self.normalized_laplacian() @ self.base[:, u]
             )
-
+            
         self.M_ub = np.zeros(self.n + 1)
         self.M_lb = np.zeros(self.n + 1)
+        self.degCumSum = np.cumsum(self.deg)
         for u in range(self.n + 1):
             s = self.base[:, u].T @ self.deg / np.sqrt(self.m * 2)
             outCnt = 0
@@ -77,7 +86,8 @@ class NetSwitch:
 
             outCnt = 0
             for v in range(u):
-                outCnt = min(sum(self.deg[:u]), sum(self.deg[u:]))
+                outCnt = min(self.degCumSum[u-1],2*self.m-self.degCumSum[u-1])
+                #min(sum(self.deg[:u]), sum(self.deg[u:]))
 
             self.M_lb[u] = (self.m * 2 - 4 * outCnt) / (self.n) - s * s
 
@@ -510,7 +520,7 @@ class NetSwitch:
                             swt = randi, randj, curk, curl
                             swt = self.expandSwitchModA(swt, normalized=False)
                             if self.checkOrdParMod(self.m_limit, swt, normalized=False):
-                                print(self.swt_done)
+                                #print(self.swt_done)
                                 self.switch(swt, update_N=False)
                                 self.update_N(swt)
                                 cswitch_found = True
@@ -539,7 +549,7 @@ class NetSwitch:
                             swt = randi, randj, curk, curl
 
                             if self.checkOrdParMod(self.m_limit, swt, normalized=False):
-                                print(self.swt_done)
+                                #print(self.swt_done)
                                 self.switch(swt, update_N=False)
                                 self.update_N(swt)
                                 cswitch_found = True
@@ -733,19 +743,28 @@ class NetSwitch:
         return (M2 - di1) / (di2 - di1)
 
     def laplacian(self):
-        return np.diag(self.deg) - self.A
+        if type(self.lapMat) != np.ndarray:
+            self.lapMat = np.diag(self.deg) - self.A
+            
+        return self.lapMat
 
     def normalized_laplacian(self):
-        Dm05 = np.diag(
-            [1 / np.sqrt(self.deg[i]) if self.deg[i] != 0 else 0 for i in range(self.n)]
-        )
-        return np.matmul(np.matmul(Dm05, self.laplacian()), Dm05)
+        if type(self.lapMat_N) != np.ndarray:
+            Dm05 = np.diag(
+                [1 / np.sqrt(self.deg[i]) if self.deg[i] != 0 else 0 for i in range(self.n)]
+            )
+            self.lapMat_N =  np.matmul(np.matmul(Dm05, self.laplacian()), Dm05)
+            
+        return self.lapMat_N
 
     def normalized_modularity(self):
-        Dm05 = np.diag(
-            [1 / np.sqrt(self.deg[i]) if self.deg[i] != 0 else 0 for i in range(self.n)]
-        )
-        return Dm05 @ self.M @ Dm05
+        if self.modMat_N == None:
+            Dm05 = np.diag(
+                [1 / np.sqrt(self.deg[i]) if self.deg[i] != 0 else 0 for i in range(self.n)]
+            )
+            self.modMat_N = Dm05 @ self.M @ Dm05
+
+        return self.modMat_N
 
     def l2(self, normed=True, fast=True):
         if fast:

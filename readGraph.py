@@ -37,6 +37,7 @@ def read_Graph(file, n=100, meanDeg=10):
         A = mmread(file)
         if scipy.sparse.issparse(A):
             A = np.array(A.todense())
+        A = A.T+A
         A = np.array(A > 0, dtype=np.int8)
         sortIdx = np.argsort(-np.sum(A, axis=0))
         A = A[sortIdx, :][:, sortIdx]

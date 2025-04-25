@@ -24,7 +24,7 @@ class SIS:
             I0 = int(np.floor(i0 * self.N))
             self.I = np.random.permutation([1] * I0 + [0] * (self.N - I0))
         elif type(i0) is list:
-            self.I = i0
+            self.I = np.array(i0)
         elif i0 == "hub":
             self.I = np.zeros(self.N)
             self.I[np.argmax(np.sum(self.A, axis=1))] = 1
