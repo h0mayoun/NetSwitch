@@ -28,65 +28,40 @@ file = [
     "ca-GrQc.mtx",
 ]
 
-# n = 256
+# n = 128
 # p = np.log2(n) * 1.1 / n
-# kn = 4
-# graphtype = "BA"
+# kn = 3
+# graphtype = "ER"
 # if graphtype == "ER":
 #     graph = ig.Graph.Erdos_Renyi(n=n, p=p)
 #     graph_des = "ER-n={}-p={:.2e}-seed=({},{})".format(n, p, seed1, seed2)
 # elif graphtype == "BA":
 #     graph = ig.Graph.Barabasi(n=n, m=kn)
 #     graph_des = "BA-n={}-k={}-seed=({},{})".format(n, kn, seed1, seed2)
-# S = NetSwitch(graph)
-
-filenum = 4
+filenum = 2
 A = read_Graph("graphs/" + file[filenum])
-S = NetSwitch(ig.Graph.Adjacency(A))
+n = A.shape[0]
 graph_des = file[filenum]
-# A = read_Graph("graphs/reptilia-tortoise-network-bsv.edges")
-# S = NetSwitch(ig.Graph.Adjacency(A))
+deg = sorted(np.sum(A,axis = 1), reverse=True)
+base = np.zeros((n,0))
 
-# A = read_Graph("graphs/inf-USAir97.mtx")
-# S = NetSwitch(ig.Graph.Adjacency(A))
-# A = read_Graph("graphs/ia-radoslaw-email.edges",meanDeg=20)
-# S = NetSwitch(ig.Graph.Adjacency(A))
-# print(np.sum(A)/S.n)
-# fig, ax = plt.subplots(2, 2, figsize=(3, 3))
-# S.plotAdjacencyImage(ax[0,0])
-# plt.savefig("img.png",dpi=1000)
-# #print(A)
-# 0/0
-# fig, ax = plt.subplots(2, 3, figsize=(9, 3))
-# S.plotAdjacencyImage(ax[0,0])
-# S.plotNetSwitchGraph(ax[0,1])
-# ax[0,1].axis('equal')
-# ax[0,2].plot(S.base_mod)
-# modAprx = np.zeros(S.n)
-# degVec = S.deg.reshape(1, -1)
-# for u in range(1, S.n):
-#     s = np.array(
-#         [
-#             (
-#                 -S.deg[i] / np.sqrt(2 * S.m * S.n)
-#                 if i < u
-#                 else S.deg[i] / np.sqrt(2 * S.m * S.n)
-#             )
-#             for i in range(S.n)
-#         ]
-#     ).reshape(1, -1)
-#     modAprx[u] = np.mean(degVec) - np.sum(s.T @ s)
-# fig, ax = plt.subplots(2, 3, figsize=(9, 9))
-# S.switch_A(alg="GRDY")
-# S.plotAdjacencyImage(ax[1, 0])
-# S.plotNetSwitchGraph(ax[1, 1])
-# ax[1, 1].axis("equal")
-# ax[1, 2].plot(S.base_mod)
-# ax[1, 2].plot(modAprx)
-# ax[1, 2].plot(S.M_limit)
+# print(deg)
+# for u in range(n+1):
+#     s = np.ones((n,1))
+    
+#     e = n
+#     b = n-u
+#     while b and u > deg[e-1]:
+#         b -=1
+#         e -=1
+#     s[b:e] = s[b:e]*-1
+#     base = np.hstack((base,s))
+#S = NetSwitch(ig.Graph.Adjacency(A),base = base)
+#S = NetSwitch(graph,base=base)
 
-# plt.savefig("test.png", dpi=1000)
-# 0 / 0
+
+S = NetSwitch(ig.Graph.Adjacency(A))
+
 fig = plt.figure(figsize=(9, 9))
 plt.suptitle(graph_des)
 ax1, ax2, ax3 = (
@@ -110,7 +85,7 @@ data = [
         S.L2Score(normed=True),
     )
 ]
-alg = "GRDY"
+alg = "ModA-G"
 while True:
     swt_num = S.switch_A(alg=alg, count=1000)
     data.append(
@@ -143,8 +118,8 @@ ax4, ax5, ax6 = (
 S.plotAdjacencyImage(ax4)
 S.plotNetSwitchGraph(ax5)
 ax6.plot(S.base_mod)
-ax6.plot(S.M_ub)
-ax6.plot(S.M_lb)
+#ax6.plot(S.M_ub)
+#ax6.plot(S.M_lb)
 ax5.axis("equal")
 
 

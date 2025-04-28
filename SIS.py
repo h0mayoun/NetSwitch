@@ -10,7 +10,7 @@ import time
 from scipy.sparse.csgraph import laplacian
 import imageio
 import os
-
+import copy
 
 class SIS:
 
@@ -37,7 +37,9 @@ class SIS:
                 (0, population_division, self.N), axis=None
             )
         self.Ts = [self.t]
+        self.C = copy.copy(self.I)
         self.Is = [self.count_infections()]
+        self.Cs = [np.sum(self.C)]
 
     def count_infections(self):
         if self.pop_division is None:
@@ -142,6 +144,7 @@ class SIS:
             if np.random.rand() < recovery_rate / event_rate:  # One node is recovering
                 self.I[random.choice(I_idxs)] = 0
                 self.Is.append(self.count_infections())  # self.Is[-1] - 1
+                self.Cs.append(self.Cs[-1])
             else:
                 rand_IS_channel = np.random.randint(IS_mat_sum)
                 new_infected_node = S_idxs[
@@ -159,10 +162,15 @@ class SIS:
                     self.active_IS_channels.append((new_spreader, new_infected_node))
                 self.I[new_infected_node] = 1
                 self.Is.append(self.count_infections())  # self.Is[-1] + 1
+                Ccur = self.Cs[-1]
+                if self.C[new_infected_node] == 0:
+                    self.C[new_infected_node] = 1
+                    Ccur += 1
+                self.Cs.append(Ccur)
             self.t += delay
             self.Ts.append(self.t)
 
-        return self.Ts, self.Is
+        return self.Ts, self.Is, self.Cs
 
 
 def poorclub_topnode(g):

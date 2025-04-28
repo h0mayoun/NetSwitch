@@ -42,7 +42,7 @@ class NetSwitch:
             for j in range(self.n):
                 self.M[i, j] = self.A[i, j] - (self.deg[i] * self.deg[j]) / (2 * self.m)
                
-        if base == None:
+        if not isinstance(base,list) and not isinstance(base,np.ndarray):
             self.base = np.zeros((self.n, self.n + 1))
             for u in range(self.n + 1):
                 self.base[:, u] = np.array([-1 if i < u else 1 for i in range(self.n)])
@@ -520,7 +520,7 @@ class NetSwitch:
                             swt = randi, randj, curk, curl
                             swt = self.expandSwitchModA(swt, normalized=False)
                             if self.checkOrdParMod(self.m_limit, swt, normalized=False):
-                                #print(self.swt_done)
+                                print(self.swt_done)
                                 self.switch(swt, update_N=False)
                                 self.update_N(swt)
                                 cswitch_found = True
@@ -548,8 +548,8 @@ class NetSwitch:
                         for curk, curl in all_kls:
                             swt = randi, randj, curk, curl
 
-                            if self.checkOrdParMod(self.m_limit, swt, normalized=False):
-                                #print(self.swt_done)
+                            if self.deg[randi] == self.deg[randj] or self.deg[curk] == self.deg[curl] or  self.checkOrdParMod(self.m_limit, swt, normalized=False):
+                                print(self.swt_done)
                                 self.switch(swt, update_N=False)
                                 self.update_N(swt)
                                 cswitch_found = True
@@ -926,50 +926,53 @@ class NetSwitch:
 
     def checkOrdParMod(self, modularity_limit, swt, normalized=True):
         i, j, k, l = swt
-        for u in range(self.numbase):
-            new_modularity = (
-                self.base_mod[u]
-                + (self.base[i, u] - self.base[j, u])
-                * (self.base[k, u] - self.base[l, u])
-                * 2
-            )
-            new_modularity_N = (
-                self.base_mod_N[u]
-                + (
-                    self.base[i, u] / np.sqrt(self.deg[i])
-                    - self.base[j, u] / np.sqrt(self.deg[j])
+        if not normalized:
+            for u in range(self.numbase):
+                new_modularity = (
+                    self.base_mod[u]
+                    + (self.base[i, u] - self.base[j, u])
+                    * (self.base[k, u] - self.base[l, u])
+                    * 2
                 )
-                * (
-                    self.base[k, u] / np.sqrt(self.deg[k])
-                    - self.base[l, u] / np.sqrt(self.deg[l])
+                if (
+                    (
+                        new_modularity > self.base_mod[u]
+                        and self.base_mod[u] >= modularity_limit
+                    )
+                    or (
+                        self.base_mod[u] < modularity_limit
+                        and new_modularity >= modularity_limit
+                    )
+                    #or (self.base_mod[u] < self.M_ub[u] and new_modularity >= self.M_ub[u])
+                    # m_ratio
+                ):
+                    return False
+        else:
+            for u in range(self.numbase):
+                new_modularity_N = (
+                    self.base_mod_N[u]
+                    + (
+                        self.base[i, u] / np.sqrt(self.deg[i])
+                        - self.base[j, u] / np.sqrt(self.deg[j])
+                    )
+                    * (
+                        self.base[k, u] / np.sqrt(self.deg[k])
+                        - self.base[l, u] / np.sqrt(self.deg[l])
+                    )
+                    * 2
                 )
-                * 2
-            )
 
-            if not normalized and (
-                (
-                    new_modularity > self.base_mod[u]
-                    and self.base_mod[u] >= modularity_limit
-                )
-                or (
-                    self.base_mod[u] < modularity_limit
-                    and new_modularity >= modularity_limit
-                )
-                or (self.base_mod[u] < self.M_ub[u] and new_modularity >= self.M_ub[u])
-                # m_ratio
-            ):
-                return False
-            elif normalized and (
-                (
-                    new_modularity_N > self.base_mod_N[u]
-                    and self.base_mod_N[u] >= modularity_limit
-                )
-                or (
-                    self.base_mod_N[u] < modularity_limit
-                    and new_modularity_N >= modularity_limit
-                )
-            ):
-                return False
+                if (
+                    (
+                        new_modularity_N > self.base_mod_N[u]
+                        and self.base_mod_N[u] >= modularity_limit
+                    )
+                    or (
+                        self.base_mod_N[u] < modularity_limit
+                        and new_modularity_N >= modularity_limit
+                    )
+                ):
+                    return False
         return True
 
     def checkOrdParCut(self, cut_limit, swt, normalized=True):
