@@ -28,24 +28,25 @@ file = [
     "ca-GrQc.mtx",
 ]
 
-# n = 128
-# p = np.log2(n) * 1.1 / n
-# kn = 8
-# graphtype = "ER"
-# if graphtype == "ER":
-#     graph = ig.Graph.Erdos_Renyi(n=n, p=p)
-#     graph_des = "ER-n={}-p={:.2e}-seed=({},{})".format(n, p, seed1, seed2)
-# elif graphtype == "BA":
-#     graph = ig.Graph.Barabasi(n=n, m=kn)
-#     graph_des = "BA-n={}-k={}-seed=({},{})".format(n, kn, seed1, seed2)
-# S = NetSwitch(graph)
-filenum = 6
-A = read_Graph("graphs/" + file[filenum])
-n = A.shape[0]
-graph_des = file[filenum]
-deg = sorted(np.sum(A, axis=1), reverse=True)
-base = np.zeros((n, 0))
+n = 256
+p = np.log(n) * 1.3 / n
+kn = 8
+graphtype = "ER"
+if graphtype == "ER":
+    graph = ig.Graph.Erdos_Renyi(n=n, p=p)
+    graph_des = "ER-n={}-p={:.2e}-seed=({},{})".format(n, p, seed1, seed2)
+elif graphtype == "BA":
+    graph = ig.Graph.Barabasi(n=n, m=kn)
+    graph_des = "BA-n={}-k={}-seed=({},{})".format(n, kn, seed1, seed2)
+S = NetSwitch(graph)
 
+# filenum = 4
+# A = read_Graph("graphs/" + file[filenum])
+# n = A.shape[0]
+# graph_des = file[filenum]
+# deg = sorted(np.sum(A, axis=1), reverse=True)
+# base = np.zeros((n, 0))
+# S = NetSwitch(ig.Graph.Adjacency(A))
 # print(deg)
 # for u in range(n+1):
 #     s = np.ones((n,1))
@@ -61,7 +62,6 @@ base = np.zeros((n, 0))
 #
 
 
-S = NetSwitch(ig.Graph.Adjacency(A))
 print(S.assortativity_coeff())
 fig = plt.figure(figsize=(9, 9))
 plt.suptitle(graph_des)
@@ -86,7 +86,11 @@ data = [
         S.L2Score(normed=True),
     )
 ]
-alg = "ModA-G"
+alg = "GRDY"
+if not os.path.exists("result/{}/{}/".format(graph_des, alg)):
+    os.makedirs("result/{}/{}/".format(graph_des, alg))
+
+mmwrite("result/{}/{}/{}.mtx".format(graph_des, alg, S.swt_done), S.A)
 while True:
     # print(S.MScore(normed=False))
     swt_num = S.switch_A(alg=alg, count=1000)
@@ -100,9 +104,6 @@ while True:
             S.L2Score(normed=True),
         )
     )
-
-    if not os.path.exists("result/{}/{}/".format(graph_des, alg)):
-        os.makedirs("result/{}/{}/".format(graph_des, alg))
 
     mmwrite("result/{}/{}/{}.mtx".format(graph_des, alg, S.swt_done), S.A)
     print(S.swt_done)
@@ -120,7 +121,7 @@ ax4, ax5, ax6 = (
 S.plotAdjacencyImage(ax4)
 S.plotNetSwitchGraph(ax5)
 ax6.plot(S.base_mod)
-# ax6.plot(S.M_ub)
+ax6.plot(S.M_ub)
 # ax6.plot(S.M_lb)
 ax5.axis("equal")
 

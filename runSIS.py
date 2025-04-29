@@ -24,12 +24,16 @@ file = [
     "ca-CSphd.mtx",
     "ca-GrQc.mtx",
 ]
-filenum = 6
+filenum = 4
 
 G_org = read_Graph("graphs/" + file[filenum])
-G_ModA = read_Graph("result/" + file[filenum] + "/ModA-G/13375.mtx")
-G_swt = read_Graph("result/" + file[filenum] + "/GRDY/8410.mtx")
-
+G_ModA = read_Graph("result/" + file[filenum] + "/ModA-G/1000.mtx")
+G_swt = read_Graph("result/" + file[filenum] + "/GRDY/1000.mtx")
+print(
+    np.max(np.linalg.eigvals(G_org)),
+    np.max(np.linalg.eigvals(G_ModA)),
+    np.max(np.linalg.eigvals(G_swt)),
+)
 # cmap = colors.ListedColormap(['black', 'white'])
 # plt.imshow(G_swt) #, cmap=mpl.colormaps['Greys']
 # plt.show()
@@ -40,21 +44,22 @@ fig, ax = plt.subplots()
 N = G_org.shape[0]
 
 
-betaCnt = 10
-tmax = 100
-maxepoch = 10
-
-betaList = np.linspace(0.1, 30, betaCnt)
+betaCnt = 30
+tmax = 300
+maxepoch = 50
+p1 = np.int64(np.floor(betaCnt * 0.8))
+p2 = betaCnt - p1
+betaList = np.hstack((np.linspace(0.1, 2, p1), np.linspace(2, 30, p2)))
 measurements = {}
 lifespan = np.zeros((3, betaCnt, 2))
 coverageMean = np.zeros((3, betaCnt, 2))
 coverageVar = np.zeros((3, betaCnt, 2))
-graphLabels = ["org", "swt", "mod"]
+graphLabels = ["org", "mod", "swt"]
 graphs = [G_org, G_ModA, G_swt]
 endemicFlag = np.zeros(3)
 
 for i in range(betaCnt):
-    print("{}: {:.2f}".format(i, betaList[i] / lambda1 / 10), end=" ", flush=True)
+    print("{:3d}: {:.2f}".format(i, betaList[i] / lambda1), end=" ", flush=True)
     for j in range(3):
         measurements[(i, j)] = {"lifespan": [], "coverage": [], "infect": []}
         for epoch in range(maxepoch):
@@ -69,23 +74,36 @@ for i in range(betaCnt):
                 measurements[(i, j)]["lifespan"].append(np.inf)
                 measurements[(i, j)]["infect"].append(np.mean(I[T >= tmax * 0.9]))
             print(".", end="", flush=True)
+        print("{:.2f}".format(np.mean(measurements[(i, j)]["coverage"]) / N), end=", ")
     print("")
 
 color = ["r", "g", "b"]
 for i in range(betaCnt):
     for j in range(3):
-        ax.scatter(
-            betaList[i] / lambda1,
-            np.mean(measurements[(i, j)]["coverage"]) / N,
-            color=color[j],
-        )
+        if i == 0:
+            ax.scatter(
+                betaList[i] / lambda1,
+                np.mean(measurements[(i, j)]["coverage"]) / N,
+                color=color[j],
+                label=graphLabels[j],
+            )
+        else:
+            ax.scatter(
+                betaList[i] / lambda1,
+                np.mean(measurements[(i, j)]["coverage"]) / N,
+                color=color[j],
+                label="",
+            )
     # idx = lifespan[j,:,1] > maxepoch*admitfrac
     # ax.plot(betaList[idx]/lambda1,lifespan[j,idx,0]/lifespan[j,idx,1],label = graphLabels[j])
-
+ax.set_xscale("log")
 ax.legend()
 fig.savefig(file[filenum] + ".pdf")
 
-with open("result/" + file[filenum] + "/data.pkl", "wb") as f:
+with open(
+    "result/" + file[filenum] + "/data-{}-{}-{}.pkl".format(betaCnt, tmax, maxepoch),
+    "wb",
+) as f:
     pickle.dump(measurements, f)
 # mxTime = 10000
 

@@ -845,8 +845,16 @@ class NetSwitch:
             eig_val, eig_vec = np.linalg.eig(self.normalized_modularity().astype(float))
         else:
             eig_val, eig_vec = np.linalg.eig(self.M.astype(float))
+
         idx = np.argsort(eig_val)
+        # print(
+        #    eig_val,
+        #   eig_val[idx[self.n - 1]],
+        #   eig_vec[:, idx[self.n - 1]].T @ self.M @ eig_vec[:, idx[self.n - 1]],
+        # )
+        # print(eig_vec[:, idx[self.n - 1]])
         eig_vec = np.sign(eig_vec[:, idx[self.n - 1]].reshape(-1, 1)) / np.sqrt(self.n)
+        # print(eig_vec)
         if normed:
             return (eig_vec.T @ self.normalized_modularity() @ eig_vec)[0, 0]
         else:
@@ -956,7 +964,10 @@ class NetSwitch:
                         self.base_mod[u] < modularity_limit
                         and new_modularity >= modularity_limit
                     )
-                    # or (self.base_mod[u] < self.M_ub[u] and new_modularity >= self.M_ub[u])
+                    or (
+                        self.base_mod[u] < self.M_ub[u]
+                        and new_modularity >= self.M_ub[u]
+                    )
                     # m_ratio
                 ):
                     return False
@@ -1021,8 +1032,8 @@ class NetSwitch:
 
         return True
 
-    def plotAdjacencyImage(self, ax, s=[0]):
-        if s[0] == 0:
+    def plotAdjacencyImage(self, ax, s=None):
+        if not isinstance(s, list) and not isinstance(s, np.ndarray):
             _, s = np.linalg.eig(self.M.astype(float))
             idx = np.argsort(_)
             s = np.sign(np.real(s[:, idx[self.n - 1]]))
