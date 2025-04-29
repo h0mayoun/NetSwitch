@@ -4,14 +4,16 @@ from collections import namedtuple
 from readGraph import read_Graph
 import pickle
 
-def getSS(T,I,mxTime):
+
+def getSS(T, I, mxTime):
     T = np.array(T)
     I = np.array(I)
     if T[-1] >= mxTime:
-        return np.mean(I[T>mxTime*0.9])
+        return np.mean(I[T > mxTime * 0.9])
     else:
         return 0
-    
+
+
 file = [
     "email-enron-only.mtx",
     "reptilia-tortoise-network-bsv.edges",
@@ -22,13 +24,13 @@ file = [
     "ca-CSphd.mtx",
     "ca-GrQc.mtx",
 ]
-filenum = 0
+filenum = 6
 
 G_org = read_Graph("graphs/" + file[filenum])
-G_ModA = read_Graph("result/" + file[filenum] + "/ModA-G/1274.mtx")
-G_swt = read_Graph("result/" + file[filenum] + "/GRDY/583.mtx")
+G_ModA = read_Graph("result/" + file[filenum] + "/ModA-G/13375.mtx")
+G_swt = read_Graph("result/" + file[filenum] + "/GRDY/8410.mtx")
 
-# cmap = colors.ListedColormap(['black', 'white']) 
+# cmap = colors.ListedColormap(['black', 'white'])
 # plt.imshow(G_swt) #, cmap=mpl.colormaps['Greys']
 # plt.show()
 
@@ -38,48 +40,52 @@ fig, ax = plt.subplots()
 N = G_org.shape[0]
 
 
-betaCnt = 50
+betaCnt = 10
 tmax = 100
-maxepoch = 5
+maxepoch = 10
 
-betaList = np.linspace(0.1,10,betaCnt)
+betaList = np.linspace(0.1, 30, betaCnt)
 measurements = {}
-lifespan = np.zeros((3,betaCnt,2))
-coverageMean = np.zeros((3,betaCnt,2))
-coverageVar = np.zeros((3,betaCnt,2))
-graphLabels = ["org","swt","mod"]
-graphs = [G_org,G_ModA,G_swt]
+lifespan = np.zeros((3, betaCnt, 2))
+coverageMean = np.zeros((3, betaCnt, 2))
+coverageVar = np.zeros((3, betaCnt, 2))
+graphLabels = ["org", "swt", "mod"]
+graphs = [G_org, G_ModA, G_swt]
 endemicFlag = np.zeros(3)
 
 for i in range(betaCnt):
-    print("{}: {:.2f}".format(i, betaList[i]/lambda1),end = " ",flush = True)
+    print("{}: {:.2f}".format(i, betaList[i] / lambda1 / 10), end=" ", flush=True)
     for j in range(3):
-        measurements[(i,j)] = {"lifespan":[],"coverage":[],"infect":[]}
+        measurements[(i, j)] = {"lifespan": [], "coverage": [], "infect": []}
         for epoch in range(maxepoch):
-            SISmodel = SIS(graphs[j],betaList[i]/lambda1,1,"hub")
-            T,I,C = SISmodel.Gillespie(tmax)
-            T,I,C = np.array(T),np.array(I),np.array(C)
-            measurements[(i,j)]["coverage"].append(C[-1])
-            if T[-1]<=tmax:
-                measurements[(i,j)]["lifespan"].append(T[-1])
-                measurements[(i,j)]["infect"].append(0)
+            SISmodel = SIS(graphs[j], betaList[i] / lambda1 / 10, 1 / 10, "hub")
+            T, I, C = SISmodel.Gillespie(tmax)
+            T, I, C = np.array(T), np.array(I), np.array(C)
+            measurements[(i, j)]["coverage"].append(C[-1])
+            if T[-1] <= tmax:
+                measurements[(i, j)]["lifespan"].append(T[-1])
+                measurements[(i, j)]["infect"].append(0)
             else:
-                measurements[(i,j)]["lifespan"].append(np.inf)
-                measurements[(i,j)]["infect"].append(np.mean(I[T>=tmax*0.9]))
-            print(".",end = "",flush = True)
+                measurements[(i, j)]["lifespan"].append(np.inf)
+                measurements[(i, j)]["infect"].append(np.mean(I[T >= tmax * 0.9]))
+            print(".", end="", flush=True)
     print("")
-    
-color = ["r","g","b"]
+
+color = ["r", "g", "b"]
 for i in range(betaCnt):
-    for j in range(3):   
-        ax.scatter(betaList[i]/lambda1,np.mean(measurements[(i,j)]["coverage"])/N,color = color[j])
-    #idx = lifespan[j,:,1] > maxepoch*admitfrac
-    #ax.plot(betaList[idx]/lambda1,lifespan[j,idx,0]/lifespan[j,idx,1],label = graphLabels[j])      
+    for j in range(3):
+        ax.scatter(
+            betaList[i] / lambda1,
+            np.mean(measurements[(i, j)]["coverage"]) / N,
+            color=color[j],
+        )
+    # idx = lifespan[j,:,1] > maxepoch*admitfrac
+    # ax.plot(betaList[idx]/lambda1,lifespan[j,idx,0]/lifespan[j,idx,1],label = graphLabels[j])
 
 ax.legend()
 fig.savefig(file[filenum] + ".pdf")
 
-with open("result/"+file[filenum] + "/data.pkl", 'wb') as f:
+with open("result/" + file[filenum] + "/data.pkl", "wb") as f:
     pickle.dump(measurements, f)
 # mxTime = 10000
 
@@ -99,7 +105,7 @@ with open("result/"+file[filenum] + "/data.pkl", 'wb') as f:
 #         SISmodelOrg = SIS(G_org, beta, mu, infected)
 #         SISmodelOrg.step_simulation(mxTime)
 #         OrgICnt = getSS(SISmodelOrg.Ts,SISmodelOrg.Is,mxTime)
-        
+
 #         Ilog = np.hstack((Ilog,np.array([[beta/mu],[SwtICnt],[ModAICnt],[OrgICnt]])))
 #     mn = np.mean(Ilog,axis = 1)
 #     print("\n",beta/mu,mn)

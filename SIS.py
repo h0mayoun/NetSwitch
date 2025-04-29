@@ -12,6 +12,7 @@ import imageio
 import os
 import copy
 
+
 class SIS:
 
     def __init__(self, A, beta, mu, i0, population_division=None):
@@ -143,7 +144,8 @@ class SIS:
             delay = -np.log(1.0 - np.random.rand()) / event_rate
             if np.random.rand() < recovery_rate / event_rate:  # One node is recovering
                 self.I[random.choice(I_idxs)] = 0
-                self.Is.append(self.count_infections())  # self.Is[-1] - 1
+                self.Is.append(self.Is[-1] - 1)
+                # self.Is.append(self.count_infections())  # self.Is[-1] - 1
                 self.Cs.append(self.Cs[-1])
             else:
                 rand_IS_channel = np.random.randint(IS_mat_sum)
@@ -161,7 +163,8 @@ class SIS:
                     ]
                     self.active_IS_channels.append((new_spreader, new_infected_node))
                 self.I[new_infected_node] = 1
-                self.Is.append(self.count_infections())  # self.Is[-1] + 1
+                self.Is.append(self.Is[-1] + 1)
+                # self.Is.append(self.count_infections())  # self.Is[-1] + 1
                 Ccur = self.Cs[-1]
                 if self.C[new_infected_node] == 0:
                     self.C[new_infected_node] = 1
