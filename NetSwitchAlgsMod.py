@@ -11,7 +11,7 @@ from matplotlib import colors
 
 class NetSwitch:
 
-    def __init__(self, G,base = None):
+    def __init__(self, G, base=None):
         self.A = np.array(G.get_adjacency().data, dtype=np.int8)
         self.n = np.shape(self.A)[0]
         self.deg = self.degree_seq()
@@ -25,7 +25,7 @@ class NetSwitch:
         self.lapMat_N = None
         self.modMat = None
         self.modMat_N = None
-        
+
         # -------------------------------------------Modularity Aware Modification---------------------------------------
 
         self.swt_rejected = 0
@@ -41,17 +41,17 @@ class NetSwitch:
         for i in range(self.n):
             for j in range(self.n):
                 self.M[i, j] = self.A[i, j] - (self.deg[i] * self.deg[j]) / (2 * self.m)
-               
-        if not isinstance(base,list) and not isinstance(base,np.ndarray):
+
+        if not isinstance(base, list) and not isinstance(base, np.ndarray):
             self.base = np.zeros((self.n, self.n + 1))
             for u in range(self.n + 1):
                 self.base[:, u] = np.array([-1 if i < u else 1 for i in range(self.n)])
                 self.base[:, u] = self.base[:, u] / np.linalg.norm(self.base[:, u])
         else:
             self.set_Base(base)
-            
+
         self.numbase = self.base.shape[1]
-        
+
         self.base_mod_N = np.zeros(self.numbase)
         for u in range(self.numbase):
             self.base_mod_N[u] = (
@@ -71,7 +71,7 @@ class NetSwitch:
             self.base_cut_N[u] = (
                 self.base[:, u].T @ self.normalized_laplacian() @ self.base[:, u]
             )
-            
+
         self.M_ub = np.zeros(self.n + 1)
         self.M_lb = np.zeros(self.n + 1)
         self.degCumSum = np.cumsum(self.deg)
@@ -86,8 +86,8 @@ class NetSwitch:
 
             outCnt = 0
             for v in range(u):
-                outCnt = min(self.degCumSum[u-1],2*self.m-self.degCumSum[u-1])
-                #min(sum(self.deg[:u]), sum(self.deg[u:]))
+                outCnt = min(self.degCumSum[u - 1], 2 * self.m - self.degCumSum[u - 1])
+                # min(sum(self.deg[:u]), sum(self.deg[u:]))
 
             self.M_lb[u] = (self.m * 2 - 4 * outCnt) / (self.n) - s * s
 
@@ -516,9 +516,10 @@ class NetSwitch:
                             possible_rowpairs[1][rand_rowpair_idx],
                         )
                         all_kls = self.get_all_checkers(randi, randj)
-                        for curk, curl in all_kls:
+                        for cnt, (curk, curl) in enumerate(all_kls):
                             swt = randi, randj, curk, curl
-                            swt = self.expandSwitchModA(swt, normalized=False)
+                            if cnt < len(all_kls) * 0.1:
+                                swt = self.expandSwitchModA(swt, normalized=False)
                             if self.checkOrdParMod(self.m_limit, swt, normalized=False):
                                 print(self.swt_done)
                                 self.switch(swt, update_N=False)
@@ -548,7 +549,13 @@ class NetSwitch:
                         for curk, curl in all_kls:
                             swt = randi, randj, curk, curl
 
-                            if self.deg[randi] == self.deg[randj] or self.deg[curk] == self.deg[curl] or  self.checkOrdParMod(self.m_limit, swt, normalized=False):
+                            if (
+                                self.deg[randi] == self.deg[randj]
+                                or self.deg[curk] == self.deg[curl]
+                                or self.checkOrdParMod(
+                                    self.m_limit, swt, normalized=False
+                                )
+                            ):
                                 print(self.swt_done)
                                 self.switch(swt, update_N=False)
                                 self.update_N(swt)
@@ -745,22 +752,28 @@ class NetSwitch:
     def laplacian(self):
         if type(self.lapMat) != np.ndarray:
             self.lapMat = np.diag(self.deg) - self.A
-            
+
         return self.lapMat
 
     def normalized_laplacian(self):
         if type(self.lapMat_N) != np.ndarray:
             Dm05 = np.diag(
-                [1 / np.sqrt(self.deg[i]) if self.deg[i] != 0 else 0 for i in range(self.n)]
+                [
+                    1 / np.sqrt(self.deg[i]) if self.deg[i] != 0 else 0
+                    for i in range(self.n)
+                ]
             )
-            self.lapMat_N =  np.matmul(np.matmul(Dm05, self.laplacian()), Dm05)
-            
+            self.lapMat_N = np.matmul(np.matmul(Dm05, self.laplacian()), Dm05)
+
         return self.lapMat_N
 
     def normalized_modularity(self):
         if self.modMat_N == None:
             Dm05 = np.diag(
-                [1 / np.sqrt(self.deg[i]) if self.deg[i] != 0 else 0 for i in range(self.n)]
+                [
+                    1 / np.sqrt(self.deg[i]) if self.deg[i] != 0 else 0
+                    for i in range(self.n)
+                ]
             )
             self.modMat_N = Dm05 @ self.M @ Dm05
 
@@ -943,7 +956,7 @@ class NetSwitch:
                         self.base_mod[u] < modularity_limit
                         and new_modularity >= modularity_limit
                     )
-                    #or (self.base_mod[u] < self.M_ub[u] and new_modularity >= self.M_ub[u])
+                    # or (self.base_mod[u] < self.M_ub[u] and new_modularity >= self.M_ub[u])
                     # m_ratio
                 ):
                     return False
@@ -963,14 +976,11 @@ class NetSwitch:
                 )
 
                 if (
-                    (
-                        new_modularity_N > self.base_mod_N[u]
-                        and self.base_mod_N[u] >= modularity_limit
-                    )
-                    or (
-                        self.base_mod_N[u] < modularity_limit
-                        and new_modularity_N >= modularity_limit
-                    )
+                    new_modularity_N > self.base_mod_N[u]
+                    and self.base_mod_N[u] >= modularity_limit
+                ) or (
+                    self.base_mod_N[u] < modularity_limit
+                    and new_modularity_N >= modularity_limit
                 ):
                     return False
         return True

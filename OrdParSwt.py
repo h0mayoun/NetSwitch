@@ -30,7 +30,7 @@ file = [
 
 # n = 128
 # p = np.log2(n) * 1.1 / n
-# kn = 3
+# kn = 8
 # graphtype = "ER"
 # if graphtype == "ER":
 #     graph = ig.Graph.Erdos_Renyi(n=n, p=p)
@@ -38,17 +38,18 @@ file = [
 # elif graphtype == "BA":
 #     graph = ig.Graph.Barabasi(n=n, m=kn)
 #     graph_des = "BA-n={}-k={}-seed=({},{})".format(n, kn, seed1, seed2)
-filenum = 2
+# S = NetSwitch(graph)
+filenum = 6
 A = read_Graph("graphs/" + file[filenum])
 n = A.shape[0]
 graph_des = file[filenum]
-deg = sorted(np.sum(A,axis = 1), reverse=True)
-base = np.zeros((n,0))
+deg = sorted(np.sum(A, axis=1), reverse=True)
+base = np.zeros((n, 0))
 
 # print(deg)
 # for u in range(n+1):
 #     s = np.ones((n,1))
-    
+
 #     e = n
 #     b = n-u
 #     while b and u > deg[e-1]:
@@ -56,12 +57,12 @@ base = np.zeros((n,0))
 #         e -=1
 #     s[b:e] = s[b:e]*-1
 #     base = np.hstack((base,s))
-#S = NetSwitch(ig.Graph.Adjacency(A),base = base)
-#S = NetSwitch(graph,base=base)
+# S = NetSwitch(ig.Graph.Adjacency(A),base = base)
+#
 
 
 S = NetSwitch(ig.Graph.Adjacency(A))
-
+print(S.assortativity_coeff())
 fig = plt.figure(figsize=(9, 9))
 plt.suptitle(graph_des)
 ax1, ax2, ax3 = (
@@ -87,6 +88,7 @@ data = [
 ]
 alg = "ModA-G"
 while True:
+    # print(S.MScore(normed=False))
     swt_num = S.switch_A(alg=alg, count=1000)
     data.append(
         (
@@ -118,8 +120,8 @@ ax4, ax5, ax6 = (
 S.plotAdjacencyImage(ax4)
 S.plotNetSwitchGraph(ax5)
 ax6.plot(S.base_mod)
-#ax6.plot(S.M_ub)
-#ax6.plot(S.M_lb)
+# ax6.plot(S.M_ub)
+# ax6.plot(S.M_lb)
 ax5.axis("equal")
 
 
