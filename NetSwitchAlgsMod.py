@@ -518,7 +518,7 @@ class NetSwitch:
                         all_kls = self.get_all_checkers(randi, randj)
                         for cnt, (curk, curl) in enumerate(all_kls):
                             swt = randi, randj, curk, curl
-                            if cnt < len(all_kls) * 0.1:
+                            if cnt < len(all_kls) * 0.05:
                                 swt = self.expandSwitchModA(swt, normalized=False)
                             if self.checkOrdParMod(self.m_limit, swt, normalized=False):
                                 print(self.swt_done)
@@ -625,6 +625,7 @@ class NetSwitch:
                             search_block = 0
                     # print(swt, i, j, k, l)
                     swt = i, j, k, l
+                    print(self.swt_done)
                 case _:
                     raise Exception("Undefined switching algorithm!!!")
 
@@ -840,21 +841,39 @@ class NetSwitch:
         return eig_val
 
     # -------------------------------------------Modularity Aware Modification---------------------------------------
-    def MScore(self, normed=True):
+    def MScore(self, normed=True, greedy=True):
         if normed:
             eig_val, eig_vec = np.linalg.eig(self.normalized_modularity().astype(float))
         else:
             eig_val, eig_vec = np.linalg.eig(self.M.astype(float))
 
         idx = np.argsort(eig_val)
-        # print(
-        #    eig_val,
-        #   eig_val[idx[self.n - 1]],
-        #   eig_vec[:, idx[self.n - 1]].T @ self.M @ eig_vec[:, idx[self.n - 1]],
-        # )
-        # print(eig_vec[:, idx[self.n - 1]])
-        eig_vec = np.sign(eig_vec[:, idx[self.n - 1]].reshape(-1, 1)) / np.sqrt(self.n)
-        # print(eig_vec)
+        s = np.sign(eig_vec[:, idx[self.n - 1]].reshape(-1, 1)) / np.sqrt(self.n)
+
+        if normed:
+            score = (s.T @ self.normalized_modularity() @ s)[0, 0]
+        else:
+            score = (s.T @ self.M @ s)[0, 0]
+
+        # print(score)
+        if greedy:
+            while True:
+                mxidx = -1
+                mxdelta = 0
+                for i in range(self.n):
+                    delta = 0
+                    for j in range(self.n):
+                        if i != j:
+                            delta += -4 * s[i, 0] * self.M[i, j] * s[j, 0]
+                    if delta > mxdelta:
+                        mxidx = i
+                        mxdelta = delta
+                if mxdelta == 0:
+                    break
+                else:
+                    s[mxidx, 0] = -s[mxidx, 0]
+                    score = score + mxdelta
+        return score
         if normed:
             return (eig_vec.T @ self.normalized_modularity() @ eig_vec)[0, 0]
         else:
@@ -1036,8 +1055,27 @@ class NetSwitch:
         if not isinstance(s, list) and not isinstance(s, np.ndarray):
             _, s = np.linalg.eig(self.M.astype(float))
             idx = np.argsort(_)
-            s = np.sign(np.real(s[:, idx[self.n - 1]]))
+            s = np.sign(np.real(s[:, idx[self.n - 1]])).reshape(-1, 1)
 
+        score = (s.T @ self.M @ s)[0, 0]
+        # print(score)
+        while True:
+            mxidx = -1
+            mxdelta = 0
+            for i in range(self.n):
+                delta = 0
+                for j in range(self.n):
+                    if i != j:
+                        delta += -4 * s[i, 0] * self.M[i, j] * s[j, 0]
+                if delta > mxdelta:
+                    mxidx = i
+                    mxdelta = delta
+            if mxdelta == 0:
+                break
+            else:
+                print(score)
+                s[mxidx, 0] = -s[mxidx, 0]
+                score = score + mxdelta
         # print(s)
         sPos = (s > 0).astype(np.float32).reshape(-1, 1)
         sNeg = (s < 0).astype(np.float32).reshape(-1, 1)

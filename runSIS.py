@@ -44,12 +44,12 @@ fig, ax = plt.subplots()
 N = G_org.shape[0]
 
 
-betaCnt = 30
+betaCnt = 100
 tmax = 300
-maxepoch = 50
-p1 = np.int64(np.floor(betaCnt * 0.8))
-p2 = betaCnt - p1
-betaList = np.hstack((np.linspace(0.1, 2, p1), np.linspace(2, 30, p2)))
+maxepoch = 100
+p1 = np.int64(np.floor(betaCnt * 0.95))
+p2 = betaCnt - p1 + 1
+betaList = np.hstack((np.linspace(0.1, 3, p1)[:-1], np.linspace(3, 10, p2)))
 measurements = {}
 lifespan = np.zeros((3, betaCnt, 2))
 coverageMean = np.zeros((3, betaCnt, 2))
@@ -61,20 +61,28 @@ endemicFlag = np.zeros(3)
 for i in range(betaCnt):
     print("{:3d}: {:.2f}".format(i, betaList[i] / lambda1), end=" ", flush=True)
     for j in range(3):
-        measurements[(i, j)] = {"lifespan": [], "coverage": [], "infect": []}
+        measurements[(i, j)] = {
+            "graph": graphLabels[j],
+            "beta": betaList[i] / lambda1 / 10,
+            "mu": 1 / 10,
+            "lifespan": [],
+            "coverage": [],
+            "infect": [],
+        }
         for epoch in range(maxepoch):
             SISmodel = SIS(graphs[j], betaList[i] / lambda1 / 10, 1 / 10, "hub")
             T, I, C = SISmodel.Gillespie(tmax)
             T, I, C = np.array(T), np.array(I), np.array(C)
-            measurements[(i, j)]["coverage"].append(C[-1])
+            measurements[(i, j)]["coverage"].append(C[-1] / N)
             if T[-1] <= tmax:
                 measurements[(i, j)]["lifespan"].append(T[-1])
                 measurements[(i, j)]["infect"].append(0)
             else:
                 measurements[(i, j)]["lifespan"].append(np.inf)
-                measurements[(i, j)]["infect"].append(np.mean(I[T >= tmax * 0.9]))
-            print(".", end="", flush=True)
-        print("{:.2f}".format(np.mean(measurements[(i, j)]["coverage"]) / N), end=", ")
+                measurements[(i, j)]["infect"].append(np.mean(I[T >= tmax * 0.9]) / N)
+            if epoch % 20 == 0 and j == 0:
+                print(".", end="", flush=True)
+        print("{:.2f}".format(np.mean(measurements[(i, j)]["coverage"])), end=", ")
     print("")
 
 color = ["r", "g", "b"]

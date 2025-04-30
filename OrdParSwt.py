@@ -28,8 +28,8 @@ file = [
     "ca-GrQc.mtx",
 ]
 
-n = 256
-p = np.log(n) * 1.3 / n
+n = 1024
+p = np.log2(n) * 1.2 / n
 kn = 8
 graphtype = "ER"
 if graphtype == "ER":
@@ -86,14 +86,15 @@ data = [
         S.L2Score(normed=True),
     )
 ]
-alg = "GRDY"
+print(S.MScore(normed=False))
+alg = "ModA-G"
 if not os.path.exists("result/{}/{}/".format(graph_des, alg)):
     os.makedirs("result/{}/{}/".format(graph_des, alg))
 
 mmwrite("result/{}/{}/{}.mtx".format(graph_des, alg, S.swt_done), S.A)
 while True:
     # print(S.MScore(normed=False))
-    swt_num = S.switch_A(alg=alg, count=1000)
+    swt_num = S.switch_A(alg=alg, count=500)
     data.append(
         (
             S.swt_done,
