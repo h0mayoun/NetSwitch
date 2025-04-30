@@ -841,22 +841,23 @@ class NetSwitch:
         return eig_val
 
     # -------------------------------------------Modularity Aware Modification---------------------------------------
-    def MScore(self, normed=True, greedy=True):
+    def MScore(self, normed=True, greedy=1):
         if normed:
             eig_val, eig_vec = np.linalg.eig(self.normalized_modularity().astype(float))
         else:
             eig_val, eig_vec = np.linalg.eig(self.M.astype(float))
 
         idx = np.argsort(eig_val)
-        s = np.sign(eig_vec[:, idx[self.n - 1]].reshape(-1, 1)) / np.sqrt(self.n)
+        levec = eig_vec[:, idx[self.n - 1]]
+        s = np.sign(levec.reshape(-1, 1)) / np.sqrt(self.n)
 
         if normed:
             score = (s.T @ self.normalized_modularity() @ s)[0, 0]
         else:
             score = (s.T @ self.M @ s)[0, 0]
 
-        # print(score)
-        if greedy:
+        #print(levec)
+        if greedy == 1:
             while True:
                 mxidx = -1
                 mxdelta = 0
@@ -873,6 +874,7 @@ class NetSwitch:
                 else:
                     s[mxidx, 0] = -s[mxidx, 0]
                     score = score + mxdelta
+                print(score)
         return score
         if normed:
             return (eig_vec.T @ self.normalized_modularity() @ eig_vec)[0, 0]
@@ -1059,23 +1061,6 @@ class NetSwitch:
 
         score = (s.T @ self.M @ s)[0, 0]
         # print(score)
-        while True:
-            mxidx = -1
-            mxdelta = 0
-            for i in range(self.n):
-                delta = 0
-                for j in range(self.n):
-                    if i != j:
-                        delta += -4 * s[i, 0] * self.M[i, j] * s[j, 0]
-                if delta > mxdelta:
-                    mxidx = i
-                    mxdelta = delta
-            if mxdelta == 0:
-                break
-            else:
-                print(score)
-                s[mxidx, 0] = -s[mxidx, 0]
-                score = score + mxdelta
         # print(s)
         sPos = (s > 0).astype(np.float32).reshape(-1, 1)
         sNeg = (s < 0).astype(np.float32).reshape(-1, 1)

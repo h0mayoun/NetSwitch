@@ -9,7 +9,7 @@ import copy
 import os
 from scipy.io import mmread, mmwrite
 from readGraph import read_Graph
-
+import sys
 seed1 = 1
 seed2 = 1
 np.set_printoptions(precision=2, suppress=True, linewidth=np.inf)
@@ -28,7 +28,7 @@ file = [
     "ca-GrQc.mtx",
 ]
 
-n = 1024
+n = 2048
 p = np.log2(n) * 1.2 / n
 kn = 8
 graphtype = "ER"
@@ -70,11 +70,13 @@ ax1, ax2, ax3 = (
     fig.add_subplot(3, 3, 3),
     fig.add_subplot(3, 3, 4),
 )
+print("1")
 S.plotAdjacencyImage(ax1)
 S.plotNetSwitchGraph(ax2)
 ax3.plot(S.base_mod)
 ax2.axis("equal")
 
+print("2")
 
 data = [
     (
@@ -86,15 +88,13 @@ data = [
         S.L2Score(normed=True),
     )
 ]
-print(S.MScore(normed=False))
-alg = "ModA-G"
-if not os.path.exists("result/{}/{}/".format(graph_des, alg)):
+alg = "GRDY"
+if sys.argv[1] == "1" and not os.path.exists("result/{}/{}/".format(graph_des, alg)):
     os.makedirs("result/{}/{}/".format(graph_des, alg))
-
-mmwrite("result/{}/{}/{}.mtx".format(graph_des, alg, S.swt_done), S.A)
+    mmwrite("result/{}/{}/{}.mtx".format(graph_des, alg, S.swt_done), S.A)
 while True:
     # print(S.MScore(normed=False))
-    swt_num = S.switch_A(alg=alg, count=500)
+    swt_num = S.switch_A(alg=alg, count=1000)
     data.append(
         (
             S.swt_done,
@@ -105,8 +105,8 @@ while True:
             S.L2Score(normed=True),
         )
     )
-
-    mmwrite("result/{}/{}/{}.mtx".format(graph_des, alg, S.swt_done), S.A)
+    if sys.argv[1] == "1":
+        mmwrite("result/{}/{}/{}.mtx".format(graph_des, alg, S.swt_done), S.A)
     print(S.swt_done)
     if swt_num != -1:
         break
@@ -123,6 +123,7 @@ S.plotAdjacencyImage(ax4)
 S.plotNetSwitchGraph(ax5)
 ax6.plot(S.base_mod)
 ax6.plot(S.M_ub)
+ax6.set_xlim([0,n])
 # ax6.plot(S.M_lb)
 ax5.axis("equal")
 
@@ -134,19 +135,6 @@ ax7.plot(
     label="lev",
     color="tab:blue",
 )
-# ax7.plot(
-#     [i[0] for i in data],
-#     [100 * (i[2] / data[0][2] - 1) for i in data],
-#     label="l2",
-#     color="tab:orange",
-# )
-# ax7.plot(
-#     [i[0] for i in data],
-#     [100 * (i[5] / data[0][5] - 1) for i in data],
-#     label="L2S",
-#     ls="--",
-#     color="tab:orange",
-# )
 ax7.plot(
     [i[0] for i in data],
     [100 * (i[3] / data[0][3] - 1) for i in data],
@@ -157,13 +145,13 @@ ax7.plot(
     [i[0] for i in data],
     [100 * (i[4] / data[0][4] - 1) for i in data],
     label="MS",
-    ls="--",
+    ls="-.",
     color="tab:green",
 )
 ax7.plot([0, S.swt_done], [0, 0], label="", color="k", linestyle=":")
 ax7.legend()
 num = len(os.listdir("image"))
-plt.savefig("image/" + str(num + 1), dpi=1000)
+plt.savefig("image/" + str(num + 1)+".pdf", dpi=1000)
 # plt.subplot(1, 3, 3)
 # plt.imshow(S.A, cmap=cmap)
 # plt.tight_layout()

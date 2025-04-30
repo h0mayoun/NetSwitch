@@ -26,14 +26,14 @@ file = [
 ]
 filenum = 4
 
-G_org = read_Graph("graphs/" + file[filenum])
-G_ModA = read_Graph("result/" + file[filenum] + "/ModA-G/1000.mtx")
-G_swt = read_Graph("result/" + file[filenum] + "/GRDY/1000.mtx")
-print(
-    np.max(np.linalg.eigvals(G_org)),
-    np.max(np.linalg.eigvals(G_ModA)),
-    np.max(np.linalg.eigvals(G_swt)),
-)
+G_org = read_Graph("result/ER-n=2048-p=6.45e-03-seed=(1,1)/GRDY/0.mtx")
+G_ModA = read_Graph("result/ER-n=2048-p=6.45e-03-seed=(1,1)/ModA-G/5000.mtx")
+G_swt = read_Graph("result/ER-n=2048-p=6.45e-03-seed=(1,1)/GRDY/2000.mtx")
+# print(
+#     np.max(np.linalg.eigvals(G_org)),
+#     np.max(np.linalg.eigvals(G_ModA)),
+#     np.max(np.linalg.eigvals(G_swt)),
+# )
 # cmap = colors.ListedColormap(['black', 'white'])
 # plt.imshow(G_swt) #, cmap=mpl.colormaps['Greys']
 # plt.show()
@@ -44,12 +44,12 @@ fig, ax = plt.subplots()
 N = G_org.shape[0]
 
 
-betaCnt = 100
-tmax = 300
-maxepoch = 100
-p1 = np.int64(np.floor(betaCnt * 0.95))
+betaCnt = 10
+tmax = 50
+maxepoch = 5 
+p1 = np.int64(np.floor(betaCnt * 1))
 p2 = betaCnt - p1 + 1
-betaList = np.hstack((np.linspace(0.1, 3, p1)[:-1], np.linspace(3, 10, p2)))
+betaList = np.hstack((np.linspace(0.1, 1.5, p1)[:-1], np.linspace(3, 10, p2)))
 measurements = {}
 lifespan = np.zeros((3, betaCnt, 2))
 coverageMean = np.zeros((3, betaCnt, 2))
