@@ -27,8 +27,8 @@ file = [
 filenum = 4
 
 G_org = read_Graph("result/ER-n=2048-p=6.45e-03-seed=(1,1)/GRDY/0.mtx")
-G_ModA = read_Graph("result/ER-n=2048-p=6.45e-03-seed=(1,1)/ModA-G/5000.mtx")
-G_swt = read_Graph("result/ER-n=2048-p=6.45e-03-seed=(1,1)/GRDY/2000.mtx")
+G_ModA = read_Graph("result/ER-n=2048-p=6.45e-03-seed=(1,1)/ModA-G/57000.mtx")
+G_swt = read_Graph("result/ER-n=2048-p=6.45e-03-seed=(1,1)/GRDY/19000.mtx")
 # print(
 #     np.max(np.linalg.eigvals(G_org)),
 #     np.max(np.linalg.eigvals(G_ModA)),
@@ -44,12 +44,13 @@ fig, ax = plt.subplots()
 N = G_org.shape[0]
 
 
-betaCnt = 10
-tmax = 50
-maxepoch = 5 
-p1 = np.int64(np.floor(betaCnt * 1))
+betaCnt = 2
+tmax = 100
+maxepoch = 10
+p1 = np.int64(np.floor(betaCnt * 0.5))
 p2 = betaCnt - p1 + 1
-betaList = np.hstack((np.linspace(0.1, 1.5, p1)[:-1], np.linspace(3, 10, p2)))
+split = 1.5
+betaList = np.hstack((np.linspace(0.01, split, p1)[:-1], np.linspace(split, 100, p2)))
 measurements = {}
 lifespan = np.zeros((3, betaCnt, 2))
 coverageMean = np.zeros((3, betaCnt, 2))
@@ -63,14 +64,14 @@ for i in range(betaCnt):
     for j in range(3):
         measurements[(i, j)] = {
             "graph": graphLabels[j],
-            "beta": betaList[i] / lambda1 / 10,
-            "mu": 1 / 10,
+            "beta": betaList[i] / lambda1 / 100,
+            "mu": 1 / 100,
             "lifespan": [],
             "coverage": [],
             "infect": [],
         }
         for epoch in range(maxepoch):
-            SISmodel = SIS(graphs[j], betaList[i] / lambda1 / 10, 1 / 10, "hub")
+            SISmodel = SIS(graphs[j], betaList[i] / lambda1 / 100, 1 / 100, "hub")
             T, I, C = SISmodel.Gillespie(tmax)
             T, I, C = np.array(T), np.array(I), np.array(C)
             measurements[(i, j)]["coverage"].append(C[-1] / N)
@@ -80,8 +81,11 @@ for i in range(betaCnt):
             else:
                 measurements[(i, j)]["lifespan"].append(np.inf)
                 measurements[(i, j)]["infect"].append(np.mean(I[T >= tmax * 0.9]) / N)
-            if epoch % 20 == 0 and j == 0:
-                print(".", end="", flush=True)
+            print(betaList[i] / lambda1,graphLabels[j]," ",C[-1] / N)
+            #if epoch % 5 == 0:
+                #print(".", end="", flush=True)
+        #if j==0:
+            #print(" ",end = "",flush=True)        
         print("{:.2f}".format(np.mean(measurements[(i, j)]["coverage"])), end=", ")
     print("")
 
@@ -109,7 +113,7 @@ ax.legend()
 fig.savefig(file[filenum] + ".pdf")
 
 with open(
-    "result/" + file[filenum] + "/data-{}-{}-{}.pkl".format(betaCnt, tmax, maxepoch),
+    "result/ER-n=2048-p=6.45e-03-seed=(1,1)/data-{}-{}-{}.pkl".format(betaCnt, tmax, maxepoch),
     "wb",
 ) as f:
     pickle.dump(measurements, f)

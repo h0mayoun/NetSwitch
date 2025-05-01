@@ -21,7 +21,7 @@ ax2 = ax1.twinx()
 color = "rgb"
 with open(
     "result/{}/data-{}-{}-{}.pkl".format(
-        file[int(sys.argv[1])], sys.argv[2], sys.argv[3], sys.argv[4]
+        sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
     ),
     "rb",
 ) as f:
@@ -70,7 +70,7 @@ for i, graph in enumerate(graphLabels):
     idx = np.isfinite(y)
     # print(x, y)
     ax1.plot(x[idx], y[idx], label="", color=color[i], alpha=0.1)
-    ax1.plot(x[idx], gaussian_filter1d(y[idx], sigma=3), label=graph, color=color[i])
+    ax1.plot(x[idx], gaussian_filter1d(y[idx], sigma=1), label=graph, color=color[i])
 
     y = np.array(plotData[graph]["coverage"])
     x = np.array(plotData["lambda"])
@@ -78,4 +78,4 @@ for i, graph in enumerate(graphLabels):
 
     ax2.plot(x[idx], y[idx], label=graph, color=color[i], ls="--")
 plt.legend()
-plt.savefig("result/{}/plot.pdf".format(file[int(sys.argv[1])]))
+plt.savefig("result/{}/plot.pdf".format(sys.argv[1]))
