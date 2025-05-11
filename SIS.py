@@ -133,6 +133,7 @@ class SIS:
         if animate:
             self.active_IS_channels = []
         while (self.t <= tmax) and (np.sum(self.Is[-1]) > 0):
+            #print("{:.1f}-{:.1f}".format(self.t,),end = " ",flush = True)
             I_idxs = np.where(self.I == 1)[0]
             S_idxs = np.where(self.I == 0)[0]
             IS_mat = self.A[I_idxs, :][:, S_idxs]

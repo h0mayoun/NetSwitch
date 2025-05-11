@@ -23,6 +23,7 @@ color = "rgb"
 with open(
     "result/{}/data-{}-{}-{}.pkl".format(
         sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+        sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
     ),
     "rb",
 ) as f:
@@ -84,4 +85,5 @@ for i, graph in enumerate(graphLabels):
 # ax1.set_xscale("log")
 # ax2.set_xscale("log")
 plt.legend()
+plt.savefig("result/{}/plot.pdf".format(sys.argv[1]))
 plt.savefig("result/{}/plot.pdf".format(sys.argv[1]))
