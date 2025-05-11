@@ -12,6 +12,8 @@ import imageio
 import os
 import copy
 
+from scipy.interpolate import interp1d
+
 
 class SIS:
 
@@ -41,6 +43,7 @@ class SIS:
         self.C = copy.copy(self.I)
         self.Is = [self.count_infections()]
         self.Cs = [np.sum(self.C)]
+        self.timeInfected = np.zeros(self.N)
 
     def count_infections(self):
         if self.pop_division is None:
@@ -126,7 +129,7 @@ class SIS:
             os.remove(gif_name + str(fileNo) + ".png")
         return True
 
-    def Gillespie(self, tmax, animate=False):
+    def Gillespie(self, tmax, animate=False, samplingRate=0):
         if animate:
             self.active_IS_channels = []
         while (self.t <= tmax) and (np.sum(self.Is[-1]) > 0):
@@ -143,7 +146,8 @@ class SIS:
             event_rate = recovery_rate + infection_rate
             delay = -np.log(1.0 - np.random.rand()) / event_rate
             if np.random.rand() < recovery_rate / event_rate:  # One node is recovering
-                self.I[random.choice(I_idxs)] = 0
+                rNode = random.choice(I_idxs)
+                self.I[rNode] = 0
                 self.Is.append(self.Is[-1] - 1)
                 # self.Is.append(self.count_infections())  # self.Is[-1] - 1
                 self.Cs.append(self.Cs[-1])
@@ -170,10 +174,33 @@ class SIS:
                     self.C[new_infected_node] = 1
                     Ccur += 1
                 self.Cs.append(Ccur)
+            for node in range(self.N):
+                self.timeInfected[node] += delay * self.I[node]
             self.t += delay
+            # print("{:.1f}".format(self.t), end=", ")
             self.Ts.append(self.t)
+        # print("")
+        if np.sum(self.Is[-1]) == 0:
+            self.lifespan = self.Ts[-1]
+        else:
+            self.lifespan = np.inf
+        if samplingRate == 0:
+            return self.Ts, self.Is, self.Cs, self.lifespan
+        else:
+            self.resample(samplingRate=samplingRate, tmax=tmax)
+            return self.Tsr, self.Isr, self.Csr, self.lifespan
 
-        return self.Ts, self.Is, self.Cs
+    def resample(self, samplingRate=1, tmax=-1):
+        if tmax == -1:
+            endTime = np.floor(self.Ts[-1] / samplingRate) * samplingRate
+            self.Tsr = np.linspace(0, endTime, np.int64(endTime / samplingRate) + 1)
+        else:
+            endTime = np.floor(tmax / samplingRate) * samplingRate
+            self.Tsr = np.linspace(0, endTime, np.int64(endTime / samplingRate) + 1)
+        itpI = interp1d(self.Ts, self.Is, kind="previous", fill_value="extrapolate")
+        self.Isr = itpI(self.Tsr)
+        itpC = interp1d(self.Ts, self.Cs, kind="previous", fill_value="extrapolate")
+        self.Csr = itpC(self.Tsr)
 
 
 def poorclub_topnode(g):
@@ -185,6 +212,8 @@ def poorclub_topnode(g):
         cluster_nodes = np.where(FV_sign == -1)[0]
     return np.min(cluster_nodes)
 
+
+# print(resample([0.0, 0.5, 1.5, 2.2, 3.0], [0.0, 1.0, 0.5, 0.8, 1.2], samplingRate=0.2))
 
 # # with open('../Sims/switch_process/N1000_BA25/SR_N1000_ba25_adj_original.csv', newline='\n') as f_in:
 # with open("Switched Nets/N2048_ba50_adj_original.csv", newline="\n") as f_in:

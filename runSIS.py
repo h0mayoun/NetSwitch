@@ -26,9 +26,21 @@ file = [
 ]
 filenum = 4
 
-G_org = read_Graph("result/ER-n=2048-p=6.45e-03-seed=(1,1)/GRDY/0.mtx")
-G_ModA = read_Graph("result/ER-n=2048-p=6.45e-03-seed=(1,1)/ModA-G/5000.mtx")
-G_swt = read_Graph("result/ER-n=2048-p=6.45e-03-seed=(1,1)/GRDY/2000.mtx")
+# graph_des = "BA-n=128-k=3-seed=(1,1)"
+# files = [
+#     "result/BA-n=128-k=3-seed=(1,1)/GRDY/0.mtx",
+#     "result/BA-n=128-k=3-seed=(1,1)/GRDY/140.mtx",
+#     "result/BA-n=128-k=3-seed=(1,1)/L2A-G/595.mtx",
+# ]  # first graph is original graph
+
+graph_des = "ER-n=256-p=3.44e-02-seed=(1,1)"
+files = [
+    "result/ER-n=256-p=3.44e-02-seed=(1,1)/GRDY/0.mtx",
+    "result/ER-n=256-p=3.44e-02-seed=(1,1)/GRDY/200.mtx",
+    "result/ER-n=256-p=3.44e-02-seed=(1,1)/ModA-G/500.mtx",
+    "result/ER-n=256-p=3.44e-02-seed=(1,1)/L2A-G/2007.mtx",
+]
+G = [read_Graph(file) for file in files]
 # print(
 #     np.max(np.linalg.eigvals(G_org)),
 #     np.max(np.linalg.eigvals(G_ModA)),
@@ -38,56 +50,53 @@ G_swt = read_Graph("result/ER-n=2048-p=6.45e-03-seed=(1,1)/GRDY/2000.mtx")
 # plt.imshow(G_swt) #, cmap=mpl.colormaps['Greys']
 # plt.show()
 
-lambda1 = np.max(np.real(np.linalg.eigvals(G_org)))
+lambda1 = np.max(np.real(np.linalg.eigvals(G[0])))
 
 fig, ax = plt.subplots()
-N = G_org.shape[0]
+N = G[0].shape[0]
 
-
-betaCnt = 10
-tmax = 50
-maxepoch = 5 
-p1 = np.int64(np.floor(betaCnt * 1))
+k = len(files)
+split = 1.5
+betaCnt = 40
+tmax = 500
+maxepoch = 100
+p1 = np.int64(np.floor(betaCnt * 1 / 2))
 p2 = betaCnt - p1 + 1
-betaList = np.hstack((np.linspace(0.1, 1.5, p1)[:-1], np.linspace(3, 10, p2)))
+betaList = np.hstack((np.linspace(1e-9, split, p1)[:-1], np.linspace(split, 5, p2)))
 measurements = {}
-lifespan = np.zeros((3, betaCnt, 2))
-coverageMean = np.zeros((3, betaCnt, 2))
-coverageVar = np.zeros((3, betaCnt, 2))
-graphLabels = ["org", "mod", "swt"]
-graphs = [G_org, G_ModA, G_swt]
-endemicFlag = np.zeros(3)
-
+lifespan = np.zeros((k, betaCnt, 2))
+coverageMean = np.zeros((k, betaCnt, 2))
+coverageVar = np.zeros((k, betaCnt, 2))
+graphLabels = np.arange(1, k + 1)
+endemicFlag = np.zeros(k)
+scale = np.sqrt(10000)
 for i in range(betaCnt):
     print("{:3d}: {:.2f}".format(i, betaList[i] / lambda1), end=" ", flush=True)
-    for j in range(3):
+    for j in range(k):
         measurements[(i, j)] = {
             "graph": graphLabels[j],
-            "beta": betaList[i] / lambda1 / 10,
-            "mu": 1 / 10,
+            "beta": betaList[i] / lambda1 / scale,
+            "mu": 1 / scale,
             "lifespan": [],
             "coverage": [],
             "infect": [],
         }
         for epoch in range(maxepoch):
-            SISmodel = SIS(graphs[j], betaList[i] / lambda1 / 10, 1 / 10, "hub")
-            T, I, C = SISmodel.Gillespie(tmax)
+            SISmodel = SIS(G[j], betaList[i] / lambda1 / scale, 1 / scale, "hub")
+            T, I, C, lifespan = SISmodel.Gillespie(tmax, samplingRate=1)
             T, I, C = np.array(T), np.array(I), np.array(C)
             measurements[(i, j)]["coverage"].append(C[-1] / N)
-            if T[-1] <= tmax:
-                measurements[(i, j)]["lifespan"].append(T[-1])
-                measurements[(i, j)]["infect"].append(0)
-            else:
-                measurements[(i, j)]["lifespan"].append(np.inf)
-                measurements[(i, j)]["infect"].append(np.mean(I[T >= tmax * 0.9]) / N)
-            if epoch % 20 == 0 and j == 0:
+            measurements[(i, j)]["lifespan"].append(lifespan)
+            measurements[(i, j)]["infect"].append(np.mean(I) / N)
+            if epoch % 50 == 0:
                 print(".", end="", flush=True)
         print("{:.2f}".format(np.mean(measurements[(i, j)]["coverage"])), end=", ")
     print("")
 
-color = ["r", "g", "b"]
+cmap = mpl.colormaps["plasma_r"]
+color = cmap(np.linspace(0, 1, k))
 for i in range(betaCnt):
-    for j in range(3):
+    for j in range(k):
         if i == 0:
             ax.scatter(
                 betaList[i] / lambda1,
@@ -104,12 +113,12 @@ for i in range(betaCnt):
             )
     # idx = lifespan[j,:,1] > maxepoch*admitfrac
     # ax.plot(betaList[idx]/lambda1,lifespan[j,idx,0]/lifespan[j,idx,1],label = graphLabels[j])
-ax.set_xscale("log")
+
 ax.legend()
-fig.savefig(file[filenum] + ".pdf")
+fig.savefig("test.pdf")
 
 with open(
-    "result/" + file[filenum] + "/data-{}-{}-{}.pkl".format(betaCnt, tmax, maxepoch),
+    "result/{}/data-{}-{}-{}.pkl".format(graph_des, betaCnt, tmax, maxepoch),
     "wb",
 ) as f:
     pickle.dump(measurements, f)

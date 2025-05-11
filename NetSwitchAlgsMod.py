@@ -28,6 +28,7 @@ class NetSwitch:
 
         # -------------------------------------------Modularity Aware Modification---------------------------------------
 
+        self.mLimStep = 0
         self.swt_rejected = 0
 
         self.M = np.zeros((self.n, self.n))
@@ -241,7 +242,6 @@ class NetSwitch:
         )
         # ---------------------------------Modularity Aware Modification--------------------------------
         self.update_M(swt)
-
         # ----------------------------------------------------------------------------------------------
         if update_N:
             self.update_N(swt)
@@ -502,6 +502,57 @@ class NetSwitch:
                             self.update_Nrow(randi)
 
                 # ----------------------------------- Modularity Aware Modification -----------------------------------------#
+                case "L2A-G":
+                    if self.swt_done == 0:
+                        self.org_nl2 = self.l2(normed=True)
+                    cswitch_found = False
+                    while not cswitch_found:
+                        if self.total_checkers() == 0:
+                            break
+                        possible_rowpairs = np.where(self.N > 0)
+                        rand_rowpair_idx = np.random.randint(possible_rowpairs[0].size)
+                        randi, randj = (
+                            possible_rowpairs[0][rand_rowpair_idx],
+                            possible_rowpairs[1][rand_rowpair_idx],
+                        )
+                        all_kls = self.get_all_checkers(randi, randj)
+                        eig_vals, eig_vecs = eigsh(
+                            self.normalized_laplacian(), k=2, which="SM"
+                        )
+                        fvec = eig_vecs[:, 1]
+                        for cnt, (curk, curl) in enumerate(all_kls):
+                            swt0 = int(randi), int(randj), int(curk), int(curl)
+                            if cnt < len(all_kls) * 0.01:
+                                swts = self.expandSwitch(swt0)
+                            # print("__________________\n", swts)
+                            for swt in reversed(swts):
+                                i, j, k, l = swt
+                                # print(i, j, k, l, fvec[i], fvec[j], fvec[k], fvec[l])
+                                delta = (
+                                    fvec[i] / np.sqrt(self.deg[i])
+                                    - fvec[j] / np.sqrt(self.deg[j])
+                                ) * (
+                                    fvec[k] / np.sqrt(self.deg[k])
+                                    - fvec[l] / np.sqrt(self.deg[l])
+                                )
+                                if delta > 0:
+                                    continue
+                                self.switch(swt, update_N=False)
+                                new_nl2 = self.l2(normed=True)
+                                if new_nl2 >= self.org_nl2:
+                                    print(self.swt_done)
+                                    self.update_N(swt)
+                                    cswitch_found = True
+                                    break
+                                else:
+                                    self.swt_rejected += 1
+                                    self.switch(swt, update_N=False)
+                            if cswitch_found:
+                                break
+                        if not cswitch_found:
+                            self.N[randi, randj] = 0
+                            self.update_Nrow(randi)
+
                 case "ModA-G":
                     if self.swt_done == 0:
                         self.m_limit = self.MScore(normed=False)
@@ -521,7 +572,7 @@ class NetSwitch:
                             if cnt < len(all_kls) * 0.05:
                                 swt = self.expandSwitchModA(swt, normalized=False)
                             if self.checkOrdParMod(self.m_limit, swt, normalized=False):
-                                print(self.swt_done)
+                                # print(self.swt_done)
                                 self.switch(swt, update_N=False)
                                 self.update_N(swt)
                                 cswitch_found = True
@@ -549,14 +600,8 @@ class NetSwitch:
                         for curk, curl in all_kls:
                             swt = randi, randj, curk, curl
 
-                            if (
-                                self.deg[randi] == self.deg[randj]
-                                or self.deg[curk] == self.deg[curl]
-                                or self.checkOrdParMod(
-                                    self.m_limit, swt, normalized=False
-                                )
-                            ):
-                                print(self.swt_done)
+                            if self.checkOrdParMod(self.m_limit, swt, normalized=False):
+                                # print(self.swt_done)
                                 self.switch(swt, update_N=False)
                                 self.update_N(swt)
                                 cswitch_found = True
@@ -625,25 +670,18 @@ class NetSwitch:
                             search_block = 0
                     # print(swt, i, j, k, l)
                     swt = i, j, k, l
-                    print(self.swt_done)
                 case _:
                     raise Exception("Undefined switching algorithm!!!")
 
             # i, j, k, l = swt
             # print([[self.A[i, k], self.A[i, l]], [self.A[j, k], self.A[j, l]]])=
-            if (
-                not alg == "SWPC"
-                and not alg == "BLOC"
-                and not alg == "CutA"
-                and not alg == "ModA"
-                and not alg == "ModA-G"
-            ):
+            alg_tae = ["SWPC", "BLOC", "CutA", "ModA", "ModA-G", "L2A-G"]
+            if alg not in alg_tae:
                 self.switch(swt, update_B=(True if alg == "BEST" else False))
-            if (
-                alg == "SWPC" or alg == "ModA" or alg == "CutA" or alg == "ModA-G"
-            ) and not cswitch_found:
+            if (alg in alg_tae) and not cswitch_found:
                 self.swt_done -= 1
             self.swt_done += 1
+            # print(self.swt_done)
             swt_num += 1
             count -= 1
 
@@ -751,20 +789,14 @@ class NetSwitch:
         return (M2 - di1) / (di2 - di1)
 
     def laplacian(self):
-        if type(self.lapMat) != np.ndarray:
-            self.lapMat = np.diag(self.deg) - self.A
-
+        self.lapMat = np.diag(self.deg) - self.A
         return self.lapMat
 
     def normalized_laplacian(self):
-        if type(self.lapMat_N) != np.ndarray:
-            Dm05 = np.diag(
-                [
-                    1 / np.sqrt(self.deg[i]) if self.deg[i] != 0 else 0
-                    for i in range(self.n)
-                ]
-            )
-            self.lapMat_N = np.matmul(np.matmul(Dm05, self.laplacian()), Dm05)
+        Dm05 = np.diag(
+            [1 / np.sqrt(self.deg[i]) if self.deg[i] != 0 else 0 for i in range(self.n)]
+        )
+        self.lapMat_N = np.matmul(np.matmul(Dm05, self.laplacian()), Dm05)
 
         return self.lapMat_N
 
@@ -798,6 +830,7 @@ class NetSwitch:
             if normed:
                 eig_val = np.linalg.eigvals(self.normalized_laplacian())
                 idx = np.argsort(eig_val)
+                # print(eig_val[idx[0:10]])
                 eig_val = eig_val[idx[1]]
             else:
                 eig_val = np.linalg.eigvals(self.laplacian())
@@ -841,7 +874,7 @@ class NetSwitch:
         return eig_val
 
     # -------------------------------------------Modularity Aware Modification---------------------------------------
-    def MScore(self, normed=True, greedy=1):
+    def MScore(self, normed=True, greedy=0):
         if normed:
             eig_val, eig_vec = np.linalg.eig(self.normalized_modularity().astype(float))
         else:
@@ -856,7 +889,7 @@ class NetSwitch:
         else:
             score = (s.T @ self.M @ s)[0, 0]
 
-        #print(levec)
+        # print(levec)
         if greedy == 1:
             while True:
                 mxidx = -1
@@ -1145,3 +1178,29 @@ class NetSwitch:
                 bestswt = (i, j, k, l)
 
         return bestswt
+
+    def expandSwitch(self, swt):
+        i, j, k, l = swt
+        search_block = 0
+        swts = [(i, j, k, l)]
+
+        while True:
+            new_k, new_l = self.largest_kl(i, j)
+            if new_k == k and new_l == l:
+                search_block += 1
+                if search_block == 2:
+                    break
+            else:
+                k, l = new_k, new_l
+                search_block = 0
+            new_i, new_j = self.largest_ij(k, l)
+            if new_i == i and new_j == j:
+                search_block += 1
+                if search_block == 2:
+                    break
+            else:
+                i, j = new_i, new_j
+                search_block = 0
+            swts.append((i, j, k, l))
+
+        return swts

@@ -2,6 +2,7 @@ import numpy as np
 import pickle
 import sys
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 from scipy.ndimage import gaussian_filter1d
 
 file = [
@@ -15,25 +16,20 @@ file = [
     "ca-GrQc.mtx",
 ]
 filenum = 4
-graphLabels = ["org", "mod", "swt"]
+
 fig, ax1 = plt.subplots()
 ax2 = ax1.twinx()
 color = "rgb"
 with open(
     "result/{}/data-{}-{}-{}.pkl".format(
-        file[int(sys.argv[1])], sys.argv[2], sys.argv[3], sys.argv[4]
+        sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
     ),
     "rb",
 ) as f:
     data = pickle.load(f)
 
-plotData = {
-    "lambda": [],
-    "org": {"lifespan": [], "coverage": []},
-    "swt": {"lifespan": [], "coverage": []},
-    "mod": {"lifespan": [], "coverage": []},
-}
-
+plotData = {"lambda": []}
+graphLabels = {}
 for key, value in data.items():
     # print(key, value)
     # print(value["beta"])
@@ -53,16 +49,23 @@ for key, value in data.items():
     # print(np.sum(np.isfinite(lifespan)))
     meanLifespan = np.mean(lifespan[np.isfinite(lifespan)])
     meanCoverage = np.mean(coverage)
+    meanInfect = np.mean(finalval)
     # print(beta / mu)
     if len(plotData["lambda"]) == 0 or beta / mu != plotData["lambda"][-1]:
         plotData["lambda"].append(beta / mu)
+    if graph not in plotData:
+        plotData[graph] = {"lifespan": [], "coverage": [], "infect": []}
+        graphLabels[graph] = graph
     plotData[graph]["lifespan"].append(meanLifespan)
     plotData[graph]["coverage"].append(meanCoverage)
+    plotData[graph]["infect"].append(meanInfect)
     # print(beta / mu, meanLifespan, key[1])
     # ax.scatter(
     #     beta / mu, meanLifespan, color=color[key[1]], label=graphLabels[key[1]]
     # )
 # print(plotData)
+cmap = mpl.colormaps["plasma_r"]
+color = cmap(np.linspace(0, 1, len(graphLabels)))
 for i, graph in enumerate(graphLabels):
 
     y = np.array(plotData[graph]["lifespan"])
@@ -70,12 +73,15 @@ for i, graph in enumerate(graphLabels):
     idx = np.isfinite(y)
     # print(x, y)
     ax1.plot(x[idx], y[idx], label="", color=color[i], alpha=0.1)
-    ax1.plot(x[idx], gaussian_filter1d(y[idx], sigma=3), label=graph, color=color[i])
+    ax1.plot(x[idx], gaussian_filter1d(y[idx], sigma=5), label=graph, color=color[i])
 
     y = np.array(plotData[graph]["coverage"])
     x = np.array(plotData["lambda"])
     idx = np.isfinite(y)
 
     ax2.plot(x[idx], y[idx], label=graph, color=color[i], ls="--")
+
+# ax1.set_xscale("log")
+# ax2.set_xscale("log")
 plt.legend()
-plt.savefig("result/{}/plot.pdf".format(file[int(sys.argv[1])]))
+plt.savefig("result/{}/plot.pdf".format(sys.argv[1]))

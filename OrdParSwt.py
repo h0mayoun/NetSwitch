@@ -10,6 +10,7 @@ import os
 from scipy.io import mmread, mmwrite
 from readGraph import read_Graph
 import sys
+
 seed1 = 1
 seed2 = 1
 np.set_printoptions(precision=2, suppress=True, linewidth=np.inf)
@@ -28,9 +29,9 @@ file = [
     "ca-GrQc.mtx",
 ]
 
-n = 2048
+n = 64
 p = np.log2(n) * 1.2 / n
-kn = 8
+kn = 3
 graphtype = "ER"
 if graphtype == "ER":
     graph = ig.Graph.Erdos_Renyi(n=n, p=p)
@@ -94,7 +95,7 @@ if sys.argv[1] == "1" and not os.path.exists("result/{}/{}/".format(graph_des, a
     mmwrite("result/{}/{}/{}.mtx".format(graph_des, alg, S.swt_done), S.A)
 while True:
     # print(S.MScore(normed=False))
-    swt_num = S.switch_A(alg=alg, count=1000)
+    swt_num = S.modularitySwitch(count=10)
     data.append(
         (
             S.swt_done,
@@ -123,7 +124,7 @@ S.plotAdjacencyImage(ax4)
 S.plotNetSwitchGraph(ax5)
 ax6.plot(S.base_mod)
 ax6.plot(S.M_ub)
-ax6.set_xlim([0,n])
+ax6.set_xlim([0, n])
 # ax6.plot(S.M_lb)
 ax5.axis("equal")
 
@@ -151,7 +152,7 @@ ax7.plot(
 ax7.plot([0, S.swt_done], [0, 0], label="", color="k", linestyle=":")
 ax7.legend()
 num = len(os.listdir("image"))
-plt.savefig("image/" + str(num + 1)+".pdf", dpi=1000)
+plt.savefig("image/" + str(num + 1) + ".pdf", dpi=1000)
 # plt.subplot(1, 3, 3)
 # plt.imshow(S.A, cmap=cmap)
 # plt.tight_layout()
