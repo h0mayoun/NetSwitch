@@ -29,9 +29,9 @@ file = [
     "ca-GrQc.mtx",
 ]
 
-n = 64
-p = np.log2(n) * 1.2 / n
-kn = 3
+n = 128
+p = np.log2(n) * 1.1 / n
+kn = np.int64(np.ceil(np.log2(n)))
 graphtype = "ER"
 if graphtype == "ER":
     graph = ig.Graph.Erdos_Renyi(n=n, p=p)

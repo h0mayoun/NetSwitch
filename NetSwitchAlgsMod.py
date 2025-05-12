@@ -488,9 +488,20 @@ class NetSwitch:
                         all_kls = self.get_all_checkers(randi, randj)
                         for curk, curl in all_kls:
                             swt = randi, randj, curk, curl
+                            delta = (
+                                fvec[randi] / np.sqrt(self.deg[randi])
+                                - fvec[randj] / np.sqrt(self.deg[randj])
+                            ) * (
+                                fvec[curk] / np.sqrt(self.deg[curk])
+                                - fvec[curl] / np.sqrt(self.deg[curl])
+                            )
+                            if delta > 0:
+                                self.swt_rejected += 1
+                                continue
                             self.switch(swt, update_N=False)
                             new_nl2 = self.l2(normed=True)
                             if new_nl2 >= self.org_nl2:
+                                print(self.swt_done)
                                 self.update_N(swt)
                                 cswitch_found = True
                                 break
