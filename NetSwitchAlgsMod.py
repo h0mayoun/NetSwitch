@@ -486,6 +486,10 @@ class NetSwitch:
                             possible_rowpairs[1][rand_rowpair_idx],
                         )
                         all_kls = self.get_all_checkers(randi, randj)
+                        eig_vals, eig_vecs = eigsh(
+                            self.normalized_laplacian(), k=2, which="SM"
+                        )
+                        fvec = eig_vecs[:, 1]
                         for curk, curl in all_kls:
                             swt = randi, randj, curk, curl
                             delta = (

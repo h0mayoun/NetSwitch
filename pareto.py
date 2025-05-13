@@ -24,22 +24,22 @@ np.random.seed(seed1)
 random.seed(seed2)
 
 
-n = 256
+n = 1024
 p = np.log2(n) * 1.1 / n
 kn = int(np.ceil(np.log2(n)))
 graphtype = "BA"
 if graphtype == "ER":
-    # graph = ig.Graph.Erdos_Renyi(n=n, p=p)
+    graph = ig.Graph.Erdos_Renyi(n=n, p=p)
     graph_des = "ER-n={}-p={:.2e}-seed=({},{})".format(n, p, seed1, seed2)
 elif graphtype == "BA":
-    # graph = ig.Graph.Barabasi(n=n, m=kn)
+    graph = ig.Graph.Barabasi(n=n, m=kn)
     graph_des = "BA-n={}-k={}-seed=({},{})".format(n, kn, seed1, seed2)
 
-algs = ["RAND", "GRDY", "SWPC"]  # , "SWPC", "ModA-G"]
+algs = ["GRDY", "SWPC"]  # , "SWPC", "ModA-G"]
 reps = [1, 1, 1, 1]
 # color = ["tab:blue", "tab:red", "tab:orange", "tab:purple", "tab:green"]
 colors = cmap(np.linspace(0, 1, len(algs)))
-step = [100, 100, 500]
+step = [100, 1000]
 fig, ax = plt.subplots(1, 2)
 for cnt, alg in enumerate(algs):
     if False and os.path.isdir("result/{}/{}".format(graph_des, alg)):
@@ -51,9 +51,11 @@ for cnt, alg in enumerate(algs):
         S = NetSwitch(ig.Graph.Adjacency(A))
         S.swt_done = last
     elif graphtype == "ER":
-        graph = ig.Graph.Erdos_Renyi(n=n, p=p)
+        S = NetSwitch(graph)
+        #graph = ig.Graph.Erdos_Renyi(n=n, p=p)
     elif graphtype == "BA":
-        graph = ig.Graph.Barabasi(n=n, m=kn)
+        S = NetSwitch(graph)
+        #graph = ig.Graph.Barabasi(n=n, m=kn)
 
     for rep in range(reps[cnt]):
         S = NetSwitch(graph)
@@ -65,7 +67,7 @@ for cnt, alg in enumerate(algs):
                 S.Mlev(normed=False, fast=False),
             )
         ]
-        if sys.argv[1] == "1" and not os.path.exists(
+        if sys.argv[1] == "1" and rep==0 and not os.path.exists(
             "result/{}/{}/".format(graph_des, alg)
         ):
             os.makedirs("result/{}/{}/".format(graph_des, alg))
@@ -81,7 +83,7 @@ for cnt, alg in enumerate(algs):
                     S.Mlev(normed=False, fast=False),
                 )
             )
-            if sys.argv[1] == "1":
+            if sys.argv[1] == "1" and rep==0:
                 mmwrite("result/{}/{}/{}.mtx".format(graph_des, alg, S.swt_done), S.A)
             print(S.swt_done)
             if swt_num != -1:

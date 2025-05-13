@@ -129,10 +129,15 @@ class SIS:
             os.remove(gif_name + str(fileNo) + ".png")
         return True
 
-    def Gillespie(self, tmax, animate=False, samplingRate=0):
+    def Gillespie(self, tmax, animate=False, samplingRate=0,rho = 1):
+        tmaxFixed = False
         if animate:
             self.active_IS_channels = []
-        while (self.t <= tmax) and (np.sum(self.Is[-1]) > 0):
+        while (self.t <= tmax) and (self.Is[-1] > 0):
+            if self.Cs[-1] >= self.N*rho and not tmaxFixed:
+                self.lifespan = self.Ts[-1]
+                tmax = self.t*1.05
+                tmaxFixed = True
             #print("{:.1f}-{:.1f}".format(self.t,),end = " ",flush = True)
             I_idxs = np.where(self.I == 1)[0]
             S_idxs = np.where(self.I == 0)[0]
@@ -145,6 +150,7 @@ class SIS:
                 IS_mat_sum * self.beta,
             )
             event_rate = recovery_rate + infection_rate
+            #print(event_rate)
             delay = -np.log(1.0 - np.random.rand()) / event_rate
             if np.random.rand() < recovery_rate / event_rate:  # One node is recovering
                 rNode = random.choice(I_idxs)
@@ -183,12 +189,10 @@ class SIS:
         # print("")
         if np.sum(self.Is[-1]) == 0:
             self.lifespan = self.Ts[-1]
-        else:
-            self.lifespan = np.inf
         if samplingRate == 0:
             return self.Ts, self.Is, self.Cs, self.lifespan
         else:
-            self.resample(samplingRate=samplingRate, tmax=tmax)
+            self.resample(samplingRate=samplingRate)
             return self.Tsr, self.Isr, self.Csr, self.lifespan
 
     def resample(self, samplingRate=1, tmax=-1):
