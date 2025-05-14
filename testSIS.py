@@ -5,21 +5,24 @@ from readGraph import read_Graph
 import pickle
 
 np.set_printoptions(precision=1, suppress=True)
-tmax = 1000000
+tmax = 1e9
 scale = 1
 # G = read_Graph("result/BA-n=1024-k=10-seed=(1,1)/GRDY/7000.mtx")
 fig, ax = plt.subplots(1, 2)
 Gs = [
-    read_Graph("result/BA-n=256-k=8-seed=(1,1)/SWPC/0.mtx"),
-    # read_Graph("result/BA-n=256-k=8-seed=(1,1)/SWPC/5009.mtx"),
-    read_Graph("result/BA-n=256-k=8-seed=(1,1)/GRDY/300.mtx"),
+    read_Graph("result/BA-n=1024-k=10-seed=(1,1)/SWPC/0.mtx"),
+    read_Graph("result/BA-n=1024-k=10-seed=(1,1)/SWPC/16000.mtx"),
+    read_Graph("result/BA-n=1024-k=10-seed=(1,1)/GRDY/1100.mtx"),
 ]
 N = Gs[0].shape[0]
 lambda1 = np.max(np.real(np.linalg.eigvals(Gs[0])))
-iterCnt = 500
-rho = 0.8
+k = np.sum(Gs[0], axis=0)
+
+print(1 / lambda1, np.mean(k) / np.mean(k**2))
+iterCnt = 10
+rho = 0.5
 color = ["tab:blue", "tab:orange", "tab:green"]
-betaList = np.linspace(1e-9, 2, 51)
+betaList = np.linspace(0.5, 1.5, 21)
 for cnt, G in enumerate(Gs):
     En = []
     NEn = []
@@ -70,7 +73,7 @@ for cnt, G in enumerate(Gs):
                     np.mean(lifespan[endemic]),
                     np.mean(Cs[endemic, -1], axis=0),
                     np.mean(Cs[:, -1], axis=0),
-                    np.var(Cs[:, -1], axis=0),
+                    np.var(Is[endemic], axis=0) / np.mean(Is[endemic], axis=0),
                 )
             )
         else:
@@ -90,7 +93,7 @@ for cnt, G in enumerate(Gs):
                     np.mean(lifespan[notendemic]),
                     np.mean(Cs[notendemic, -1], axis=0),
                     np.mean(Cs[:, -1], axis=0),
-                    np.var(Cs[:, -1], axis=0),
+                    np.var(Is[notendemic], axis=0) / np.mean(Is[notendemic], axis=0),
                 )
             )
         else:
