@@ -129,16 +129,14 @@ class SIS:
             os.remove(gif_name + str(fileNo) + ".png")
         return True
 
-    def Gillespie(self, tmax, animate=False, samplingRate=0,rho = 1):
+    def Gillespie(self, tmax, animate=False, samplingRate=0, rho=1):
         tmaxFixed = False
         if animate:
             self.active_IS_channels = []
-        while (self.t <= tmax) and (self.Is[-1] > 0):
-            if self.Cs[-1] >= self.N*rho and not tmaxFixed:
-                self.lifespan = self.Ts[-1]
-                tmax = self.t*1.05
-                tmaxFixed = True
-            #print("{:.1f}-{:.1f}".format(self.t,),end = " ",flush = True)
+        while (self.t <= tmax) and (self.Is[-1] > 0) and self.Cs[-1] < self.N * rho:
+            # if self.Cs[-1] >= self.N * rho and not tmaxFixed:
+            #    self.lifespan = self.Ts[-1]
+            # print("{:.1f}-{:.1f}".format(self.t,),end = " ",flush = True)
             I_idxs = np.where(self.I == 1)[0]
             S_idxs = np.where(self.I == 0)[0]
             IS_mat = self.A[I_idxs, :][:, S_idxs]
@@ -150,7 +148,7 @@ class SIS:
                 IS_mat_sum * self.beta,
             )
             event_rate = recovery_rate + infection_rate
-            #print(event_rate)
+            # print(event_rate)
             delay = -np.log(1.0 - np.random.rand()) / event_rate
             if np.random.rand() < recovery_rate / event_rate:  # One node is recovering
                 rNode = random.choice(I_idxs)
@@ -184,23 +182,23 @@ class SIS:
             for node in range(self.N):
                 self.timeInfected[node] += delay * self.I[node]
             self.t += delay
-            # print("{:.1f}".format(self.t), end=", ")
             self.Ts.append(self.t)
-        # print("")
-        if np.sum(self.Is[-1]) == 0:
-            self.lifespan = self.Ts[-1]
+        if self.Is[-1] == 0:
+            lifespan = self.Ts[-1]
+        else:
+            lifespan = self.Ts[-1]
         if samplingRate == 0:
-            return self.Ts, self.Is, self.Cs, self.lifespan
+            return self.Ts, self.Is, self.Cs, lifespan
         else:
             self.resample(samplingRate=samplingRate)
-            return self.Tsr, self.Isr, self.Csr, self.lifespan
+            return self.Tsr, self.Isr, self.Csr, lifespan
 
     def resample(self, samplingRate=1, tmax=-1):
         if tmax == -1:
-            endTime = np.floor(self.Ts[-1] / samplingRate) * samplingRate
+            endTime = np.ceil(self.Ts[-1] / samplingRate) * samplingRate
             self.Tsr = np.linspace(0, endTime, np.int64(endTime / samplingRate) + 1)
         else:
-            endTime = np.floor(tmax / samplingRate) * samplingRate
+            endTime = np.ceil(tmax / samplingRate) * samplingRate
             self.Tsr = np.linspace(0, endTime, np.int64(endTime / samplingRate) + 1)
         itpI = interp1d(self.Ts, self.Is, kind="previous", fill_value="extrapolate")
         self.Isr = itpI(self.Tsr)

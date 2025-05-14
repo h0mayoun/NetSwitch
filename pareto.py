@@ -24,7 +24,7 @@ np.random.seed(seed1)
 random.seed(seed2)
 
 
-n = 1024
+n = 256
 p = np.log2(n) * 1.1 / n
 kn = int(np.ceil(np.log2(n)))
 graphtype = "BA"
@@ -39,7 +39,7 @@ algs = ["GRDY", "SWPC"]  # , "SWPC", "ModA-G"]
 reps = [1, 1, 1, 1]
 # color = ["tab:blue", "tab:red", "tab:orange", "tab:purple", "tab:green"]
 colors = cmap(np.linspace(0, 1, len(algs)))
-step = [100, 1000]
+step = [20, 1000]
 fig, ax = plt.subplots(1, 2)
 for cnt, alg in enumerate(algs):
     if False and os.path.isdir("result/{}/{}".format(graph_des, alg)):
@@ -52,10 +52,10 @@ for cnt, alg in enumerate(algs):
         S.swt_done = last
     elif graphtype == "ER":
         S = NetSwitch(graph)
-        #graph = ig.Graph.Erdos_Renyi(n=n, p=p)
+        # graph = ig.Graph.Erdos_Renyi(n=n, p=p)
     elif graphtype == "BA":
         S = NetSwitch(graph)
-        #graph = ig.Graph.Barabasi(n=n, m=kn)
+        # graph = ig.Graph.Barabasi(n=n, m=kn)
 
     for rep in range(reps[cnt]):
         S = NetSwitch(graph)
@@ -67,8 +67,10 @@ for cnt, alg in enumerate(algs):
                 S.Mlev(normed=False, fast=False),
             )
         ]
-        if sys.argv[1] == "1" and rep==0 and not os.path.exists(
-            "result/{}/{}/".format(graph_des, alg)
+        if (
+            sys.argv[1] == "1"
+            and rep == 0
+            and not os.path.exists("result/{}/{}/".format(graph_des, alg))
         ):
             os.makedirs("result/{}/{}/".format(graph_des, alg))
             mmwrite("result/{}/{}/{}.mtx".format(graph_des, alg, S.swt_done), S.A)
@@ -83,7 +85,7 @@ for cnt, alg in enumerate(algs):
                     S.Mlev(normed=False, fast=False),
                 )
             )
-            if sys.argv[1] == "1" and rep==0:
+            if sys.argv[1] == "1" and rep == 0:
                 mmwrite("result/{}/{}/{}.mtx".format(graph_des, alg, S.swt_done), S.A)
             print(S.swt_done)
             if swt_num != -1:
