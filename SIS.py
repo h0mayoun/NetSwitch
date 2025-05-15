@@ -133,10 +133,10 @@ class SIS:
         tmaxFixed = False
         if animate:
             self.active_IS_channels = []
-        while (self.t <= tmax) and (self.Is[-1] > 0) and self.Cs[-1] < self.N * rho:
-            # if self.Cs[-1] >= self.N * rho and not tmaxFixed:
-            #    self.lifespan = self.Ts[-1]
-            # print("{:.1f}-{:.1f}".format(self.t,),end = " ",flush = True)
+        while (self.t <= tmax) and (self.Is[-1] > 0):
+            if self.Cs[-1] >= self.N * rho and not tmaxFixed[-1]:
+                tmax = self.t * 1.1
+                tmaxFixed = True
             I_idxs = np.where(self.I == 1)[0]
             S_idxs = np.where(self.I == 0)[0]
             IS_mat = self.A[I_idxs, :][:, S_idxs]
@@ -183,15 +183,11 @@ class SIS:
                 self.timeInfected[node] += delay * self.I[node]
             self.t += delay
             self.Ts.append(self.t)
-        if self.Is[-1] == 0:
-            lifespan = self.Ts[-1]
-        else:
-            lifespan = self.Ts[-1]
         if samplingRate == 0:
-            return np.array(self.Ts), np.array(self.Is), np.array(self.Cs), lifespan
+            return np.array(self.Ts), np.array(self.Is), np.array(self.Cs)
         else:
             self.resample(samplingRate=samplingRate)
-            return self.Tsr, self.Isr, self.Csr, lifespan
+            return self.Tsr, self.Isr, self.Csr
 
     def resample(self, samplingRate=1, tmax=-1):
         if tmax == -1:
