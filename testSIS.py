@@ -22,7 +22,7 @@ lambda1 = np.max(np.real(np.linalg.eigvals(Gs[0])))
 k = np.sum(Gs[0], axis=0)
 
 print(1 / lambda1, np.mean(k) / np.mean(k**2))
-iterCnt = 500
+iterCnt = 100
 rho = 0.8
 color = ["tab:blue", "tab:orange", "tab:green"]
 betaList = np.linspace(0.5, 1.5, 21)
@@ -43,7 +43,7 @@ for cnt, G in enumerate(Gs):
             lifespan[i] = ls
             if C[-1] >= N * rho:
                 endemic[i] = True
-            if ls <= 300:
+            if I[-1] == 0 and ls <= 300:
                 notendemic[i] = True
             if i > 0 and len(C) < len(Cs[-1]):
                 C = np.pad(C, (0, len(Cs[-1]) - len(C)), mode="edge")
