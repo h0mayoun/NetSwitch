@@ -188,7 +188,7 @@ class SIS:
         else:
             lifespan = self.Ts[-1]
         if samplingRate == 0:
-            return self.Ts, self.Is, self.Cs, lifespan
+            return np.array(self.Ts), np.array(self.Is), np.array(self.Cs), lifespan
         else:
             self.resample(samplingRate=samplingRate)
             return self.Tsr, self.Isr, self.Csr, lifespan

@@ -33,13 +33,8 @@ filenum = 4
 #     "result/BA-n=128-k=3-seed=(1,1)/L2A-G/595.mtx",
 # ]  # first graph is original graph
 
-graph_des = "ER-n=256-p=3.44e-02-seed=(1,1)"
-files = [
-    "result/ER-n=256-p=3.44e-02-seed=(1,1)/GRDY/0.mtx",
-    "result/ER-n=256-p=3.44e-02-seed=(1,1)/GRDY/200.mtx",
-    "result/ER-n=256-p=3.44e-02-seed=(1,1)/ModA-G/500.mtx",
-    "result/ER-n=256-p=3.44e-02-seed=(1,1)/L2A-G/2007.mtx",
-]
+graph_des = "BA-n=256-k=8-seed=(1,1)"
+files = ["result/BA-n=256-k=8-seed=(1,1)/GRDY/0.mtx"]
 G = [read_Graph(file) for file in files]
 # print(
 #     np.max(np.linalg.eigvals(G_org)),
@@ -56,11 +51,11 @@ fig, ax = plt.subplots()
 N = G[0].shape[0]
 
 k = len(files)
-split = 1.5
-betaCnt = 40
+split = 2
+betaCnt = 20
 tmax = 500
 maxepoch = 100
-p1 = np.int64(np.floor(betaCnt * 1 / 2))
+p1 = np.int64(np.floor(betaCnt * 1))
 p2 = betaCnt - p1 + 1
 betaList = np.hstack((np.linspace(1e-9, split, p1)[:-1], np.linspace(split, 5, p2)))
 measurements = {}
@@ -86,7 +81,11 @@ for i in range(betaCnt):
             T, I, C, lifespan = SISmodel.Gillespie(tmax, samplingRate=1)
             T, I, C = np.array(T), np.array(I), np.array(C)
             measurements[(i, j)]["coverage"].append(C[-1] / N)
-            measurements[(i, j)]["lifespan"].append(lifespan)
+            if lifespan < tmax:
+                measurements[(i, j)]["lifespan"].append(lifespan)
+            else:
+                measurements[(i, j)]["lifespan"].append(np.inf)
+
             measurements[(i, j)]["infect"].append(np.mean(I) / N)
             if epoch % 50 == 0:
                 print(".", end="", flush=True)
