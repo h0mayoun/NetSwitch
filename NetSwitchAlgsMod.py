@@ -11,12 +11,13 @@ from matplotlib import colors
 
 class NetSwitch:
 
-    def __init__(self, G, base=None):
+    def __init__(self, G, base=None, sortAdj=True):
         self.A = np.array(G.get_adjacency().data, dtype=np.int8)
         self.n = np.shape(self.A)[0]
         self.deg = self.degree_seq()
         self.m = np.sum(self.deg) / 2
-        self.sort_adj()
+        if sortAdj:
+            self.sort_adj()
         self.countonce = True
         self.checkercount_matrix()
         self.swt_done = 0
@@ -92,8 +93,10 @@ class NetSwitch:
 
             self.M_lb[u] = (self.m * 2 - 4 * outCnt) / (self.n) - s * s
 
-    def sort_adj(self):
-        sortIdx = np.argsort(-self.deg)
+    def sort_adj(self, ordr=None):
+        if not isinstance(ordr, (list, np.ndarray)):
+            ordr = -self.deg
+        sortIdx = np.argsort(ordr)
         self.A = self.A[sortIdx, :][:, sortIdx]
         self.deg = self.deg[sortIdx]
 
@@ -1219,3 +1222,25 @@ class NetSwitch:
             swts.append((i, j, k, l))
 
         return swts
+
+    def find_random_checker_mod(self):
+        while True:
+            rnd_i, rnd_j = np.random.randint(self.n, size=2)
+            rnd_i, rnd_j = min(rnd_i, rnd_j), max(rnd_i, rnd_j)
+
+            all_checkerboard_sides = (
+                rnd_i
+                + 1
+                + np.nonzero(self.A[rnd_i, rnd_i + 1 :] ^ self.A[rnd_j, rnd_i + 1 :])[0]
+            )
+            type1 = np.where(self.A[rnd_i, all_checkerboard_sides] == 0)[0]
+            type2 = np.where(self.A[rnd_i, all_checkerboard_sides] == 1)[0]
+            if len(type2) == 0 or len(type1) == 0:
+                continue
+            rnd_k, rnd_l = (
+                all_checkerboard_sides[random.choice(type1)],
+                all_checkerboard_sides[random.choice(type2)],
+            )
+            rnd_k, rnd_l = min(rnd_k, rnd_l), max(rnd_k, rnd_l)
+            if len(set([rnd_i, rnd_j, rnd_k, rnd_l])) == 4:
+                return (rnd_i, rnd_j, rnd_k, rnd_l)
