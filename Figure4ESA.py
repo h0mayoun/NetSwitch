@@ -11,6 +11,29 @@ from scipy.io import mmread, mmwrite
 from readGraph import read_Graph
 import sys
 
+
+def getStat(A):
+    d = np.sum(A, axis=0)
+    D = np.diag(d)
+    B = d @ d.T / sum(d)
+    val, vec = np.linalg.eigh(A)
+    aval, avec = val[-1], vec[:, -1]
+
+    val, vec = np.linalg.eigh(D - A)
+    lval, lvec = val[1], vec[:, 1]
+
+    val, vec = np.linalg.eigh(A - B)
+    mval, mvec = val[-1], vec[:, -1]
+
+    return np.array(
+        [
+            aval,
+            lval,
+            mval,
+        ]
+    ), (avec, lvec, mvec)
+
+
 # plt.rcParams.update(
 #     {
 #         "text.usetex": True,  # Use LaTeX to render text
@@ -25,7 +48,7 @@ np.set_printoptions(precision=2, suppress=True, linewidth=2048)
 np.random.seed(seed1)
 random.seed(seed2)
 
-n = 64
+n = 32
 p = np.log2(n) * 1.1 / n
 kn = int(np.ceil(np.log2(n)))
 graphtype = "BA"
@@ -36,7 +59,7 @@ elif graphtype == "BA":
     graph = ig.Graph.Barabasi(n=n, m=kn)
     graph_des = "BA-n={}-k={}-seed=({},{})".format(n, kn, seed1, seed2)
 S = NetSwitch(graph)
-maxiter = 1000
+maxiter = 10000
 if not os.path.exists("result/{}".format(graph_des)):
     os.makedirs("result/{}".format(graph_des))
 
@@ -68,16 +91,20 @@ mmwrite("result/{}/O.mtx".format(graph_des), G.A)
 cnt = 0
 iterCnt = 0
 G = NetSwitch(graph)
-print(np.max(np.linalg.eigvals(G.A)), end=" ")
+G.sort_adj(ordr=getStat(G.A)[1][0])
+print(getStat(G.A)[0][0], end=" ")
 while iterCnt < maxiter:
-    a1Pre = np.max(np.linalg.eigvals(G.A))
+    a1Pre = getStat(G.A)[0][0]
 
     swt = G.find_random_checker_mod()
+    if swt == (-1, -1, -1, -1):
+        iterCnt += 1
+        continue
     G.switch(swt, update_N=False)
 
-    a1Post = np.max(np.linalg.eigvals(G.A))
+    a1Post = getStat(G.A)[0][0]
 
-    if a1Post < a1Pre:
+    if a1Post <= a1Pre:
         cnt += 1
         G.update_N(swt)
         print(".", end="", flush=True)
@@ -89,10 +116,10 @@ while iterCnt < maxiter:
 ig.plot(
     ig.Graph.Adjacency(G.A, mode=ig.ADJ_UNDIRECTED), target=ax[0][0], **visual_style
 )
-print(np.max(np.linalg.eigvals(G.A)), end=" ")
+print(getStat(G.A)[0][0], end=" ")
 print()
 ax[0][0].set_title("A-")
-G.sort_adj(ordr=np.linalg.eigh(G.A)[1][:, -1])
+G.sort_adj(ordr=getStat(G.A)[1][0])
 G.plotAdjacencyImage(ax[0][3], -1 * np.ones((n, 1)))
 ax[0][3].set_title("A-")
 mmwrite("result/{}/A-.mtx".format(graph_des), G.A)
@@ -100,16 +127,20 @@ mmwrite("result/{}/A-.mtx".format(graph_des), G.A)
 cnt = 0
 iterCnt = 0
 G = NetSwitch(graph)
-print(np.max(np.linalg.eigvals(G.A)), end=" ")
+G.sort_adj(ordr=getStat(G.A)[1][0])
+print(getStat(G.A)[0][0], end=" ")
 while iterCnt < maxiter:
-    a1Pre = np.max(np.linalg.eigvals(G.A))
+    a1Pre = getStat(G.A)[0][0]
 
     swt = G.find_random_checker_mod()
+    if swt == (-1, -1, -1, -1):
+        iterCnt += 1
+        continue
     G.switch(swt, update_N=False)
 
-    a1Post = np.max(np.linalg.eigvals(G.A))
+    a1Post = getStat(G.A)[0][0]
 
-    if a1Post > a1Pre:
+    if a1Post >= a1Pre:
         cnt += 1
         G.update_N(swt)
         print(".", end="", flush=True)
@@ -121,10 +152,10 @@ while iterCnt < maxiter:
 ig.plot(
     ig.Graph.Adjacency(G.A, mode=ig.ADJ_UNDIRECTED), target=ax[0][2], **visual_style
 )
-print(np.max(np.linalg.eigvals(G.A)), end=" ")
+print(getStat(G.A)[0][0], end=" ")
 print()
 ax[0][2].set_title("A+")
-G.sort_adj(ordr=np.linalg.eigh(G.A)[1][:, -1])
+G.sort_adj(ordr=getStat(G.A)[1][0])
 G.plotAdjacencyImage(ax[0][5], -1 * np.ones((n, 1)))
 ax[0][5].set_title("A+")
 mmwrite("result/{}/A+.mtx".format(graph_des), G.A)
@@ -132,16 +163,20 @@ mmwrite("result/{}/A+.mtx".format(graph_des), G.A)
 cnt = 0
 iterCnt = 0
 G = NetSwitch(graph)
-print(np.sort(np.linalg.eigvalsh(G.laplacian()))[1], end=" ")
-while iterCnt < maxiter:
-    l2Pre = np.sort(np.linalg.eigvalsh(G.laplacian()))[1]
+G.sort_adj(ordr=getStat(G.A)[1][1])
+print(getStat(G.A)[0][1], end=" ")
+while iterCnt < maxiter * 10:
+    l2Pre = getStat(G.A)[0][1]
 
     swt = G.find_random_checker_mod()
+    if swt == (-1, -1, -1, -1):
+        iterCnt += 1
+        continue
     G.switch(swt, update_N=False)
 
-    l2Post = np.sort(np.linalg.eigvalsh(G.laplacian()))[1]
+    l2Post = getStat(G.A)[0][1]
 
-    if l2Pre > l2Post:
+    if l2Pre >= l2Post:
         cnt += 1
         G.update_N(swt)
         print(".", end="", flush=True)
@@ -153,10 +188,10 @@ while iterCnt < maxiter:
 ig.plot(
     ig.Graph.Adjacency(G.A, mode=ig.ADJ_UNDIRECTED), target=ax[1][2], **visual_style
 )
-print(np.sort(np.linalg.eigvalsh(G.laplacian()))[1], end=" ")
+print(getStat(G.A)[0][1], end=" ")
 print()
 ax[1][2].set_title("L-")
-G.sort_adj(ordr=np.linalg.eigh(G.laplacian())[1][:, 1])
+G.sort_adj(ordr=getStat(G.A)[1][1])
 G.plotAdjacencyImage(ax[1][5], -1 * np.ones((n, 1)))
 ax[1][5].set_title("L-")
 mmwrite("result/{}/L-.mtx".format(graph_des), G.A)
@@ -164,16 +199,20 @@ mmwrite("result/{}/L-.mtx".format(graph_des), G.A)
 cnt = 0
 iterCnt = 0
 G = NetSwitch(graph)
-print(np.sort(np.linalg.eigvalsh(G.laplacian()))[1], end=" ")
-while iterCnt < maxiter:
-    l2Pre = np.sort(np.linalg.eigvalsh(G.laplacian()))[1]
+G.sort_adj(ordr=getStat(G.A)[1][1])
+print(getStat(G.A)[0][1], end=" ")
+while iterCnt < maxiter * 10:
+    l2Pre = getStat(G.A)[0][1]
 
     swt = G.find_random_checker_mod()
+    if swt == (-1, -1, -1, -1):
+        iterCnt += 1
+        continue
     G.switch(swt, update_N=False)
 
-    l2Post = np.sort(np.linalg.eigvalsh(G.laplacian()))[1]
+    l2Post = getStat(G.A)[0][1]
 
-    if l2Pre < l2Post:
+    if l2Pre <= l2Post:
         cnt += 1
         G.update_N(swt)
         print(".", end="", flush=True)
@@ -185,9 +224,9 @@ while iterCnt < maxiter:
 ig.plot(
     ig.Graph.Adjacency(G.A, mode=ig.ADJ_UNDIRECTED), target=ax[1][0], **visual_style
 )
-print(np.sort(np.linalg.eigvalsh(G.laplacian()))[1], end=" ")
+print(getStat(G.A)[0][1], end=" ")
 print()
-G.sort_adj(ordr=np.linalg.eigh(G.laplacian())[1][:, 1])
+G.sort_adj(ordr=getStat(G.A)[1][1])
 ax[1][0].set_title("L+")
 G.plotAdjacencyImage(ax[1][3], -1 * np.ones((n, 1)))
 ax[1][3].set_title("L+")
@@ -196,16 +235,20 @@ mmwrite("result/{}/L+.mtx".format(graph_des), G.A)
 cnt = 0
 iterCnt = 0
 G = NetSwitch(graph)
-print(np.max(np.linalg.eigvalsh(G.M)), end=" ")
+G.sort_adj(ordr=getStat(G.A)[1][2])
+print(getStat(G.A)[0][2], end=" ")
 while iterCnt < maxiter:
-    m1Pre = np.max(np.linalg.eigvalsh(G.M))
+    m1Pre = getStat(G.A)[0][2]
 
     swt = G.find_random_checker_mod()
+    if swt == (-1, -1, -1, -1):
+        iterCnt += 1
+        continue
     G.switch(swt, update_N=False)
 
-    m1Post = np.max(np.linalg.eigvalsh(G.M))
+    m1Post = getStat(G.A)[0][2]
 
-    if m1Pre > m1Post:
+    if m1Pre >= m1Post:
         cnt += 1
         G.update_N(swt)
         print(".", end="", flush=True)
@@ -217,10 +260,10 @@ while iterCnt < maxiter:
 ig.plot(
     ig.Graph.Adjacency(G.A, mode=ig.ADJ_UNDIRECTED), target=ax[2][0], **visual_style
 )
-print(np.max(np.linalg.eigvalsh(G.M)), end=" ")
+print(getStat(G.A)[0][2], end=" ")
 print()
 ax[2][0].set_title("M-")
-G.sort_adj(ordr=np.linalg.eigh(G.M)[1][:, -1])
+G.sort_adj(ordr=getStat(G.A)[1][2])
 G.plotAdjacencyImage(ax[2][3], -1 * np.ones((n, 1)))
 ax[2][3].set_title("M-")
 mmwrite("result/{}/M-.mtx".format(graph_des), G.A)
@@ -228,16 +271,20 @@ mmwrite("result/{}/M-.mtx".format(graph_des), G.A)
 cnt = 0
 iterCnt = 0
 G = NetSwitch(graph)
-print(np.max(np.linalg.eigvalsh(G.M)), end=" ")
+G.sort_adj(ordr=getStat(G.A)[1][2])
+print(getStat(G.A)[0][2], end=" ")
 while iterCnt < maxiter:
-    m1Pre = np.max(np.linalg.eigvalsh(G.M))
+    m1Pre = getStat(G.A)[0][2]
 
     swt = G.find_random_checker_mod()
+    if swt == (-1, -1, -1, -1):
+        iterCnt += 1
+        continue
     G.switch(swt, update_N=False)
 
-    m1Post = np.max(np.linalg.eigvalsh(G.M))
+    m1Post = getStat(G.A)[0][2]
 
-    if m1Pre < m1Post:
+    if m1Pre <= m1Post:
         cnt += 1
         G.update_N(swt)
         print(".", end="", flush=True)
@@ -249,10 +296,10 @@ while iterCnt < maxiter:
 ig.plot(
     ig.Graph.Adjacency(G.A, mode=ig.ADJ_UNDIRECTED), target=ax[2][2], **visual_style
 )
-print(np.max(np.linalg.eigvalsh(G.M)), end=" ")
+print(getStat(G.A)[0][2], end=" ")
 print()
 ax[2][2].set_title("M+")
-G.sort_adj(ordr=np.linalg.eigh(G.M)[1][:, -1])
+G.sort_adj(ordr=getStat(G.A)[1][2])
 G.plotAdjacencyImage(ax[2][5], -1 * np.ones((n, 1)))
 ax[2][5].set_title("M+")
 mmwrite("result/{}/M+.mtx".format(graph_des), G.A)

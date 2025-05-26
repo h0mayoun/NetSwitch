@@ -442,7 +442,7 @@ class NetSwitch:
         # print(self.B, self.total_checkers())
         return best_swt
 
-    def switch_A(self, alg="RAND", count=-1):
+    def switch_A(self, alg="RAND", count=-1,**kwargs):
         """Performs a number of switchings with a specified algorithm on the adjacency matrix
         The number of switchings to perform is input by the 'count' argument
         count=-1 results in continous switchings until no checkerboard is left
@@ -477,7 +477,11 @@ class NetSwitch:
 
                 case "SWPC":
                     if self.swt_done == 0:
-                        self.org_nl2 = self.l2(normed=True)
+                        if "l2lim" not in kwargs:
+                            self.org_nl2 = self.l2(normed=True)
+                        else:
+                            self.org_nl2 = self.l2(normed=True) * kwargs["l2lim"]
+
                     cswitch_found = False
                     while not cswitch_found:
                         if self.total_checkers() == 0:
@@ -508,7 +512,7 @@ class NetSwitch:
                             self.switch(swt, update_N=False)
                             new_nl2 = self.l2(normed=True)
                             if new_nl2 >= self.org_nl2:
-                                print(self.swt_done)
+                                #print(self.swt_done)
                                 self.update_N(swt)
                                 cswitch_found = True
                                 break
@@ -1224,9 +1228,10 @@ class NetSwitch:
         return swts
 
     def find_random_checker_mod(self):
-        while True:
-            rnd_i, rnd_j = np.random.randint(self.n, size=2)
-            rnd_i, rnd_j = min(rnd_i, rnd_j), max(rnd_i, rnd_j)
+        cnt = 0
+        while cnt < 10000:
+            cnt += 1
+            rnd_i, rnd_j = random.sample(range(self.n), 2)
 
             all_checkerboard_sides = (
                 rnd_i
@@ -1241,6 +1246,6 @@ class NetSwitch:
                 all_checkerboard_sides[random.choice(type1)],
                 all_checkerboard_sides[random.choice(type2)],
             )
-            rnd_k, rnd_l = min(rnd_k, rnd_l), max(rnd_k, rnd_l)
             if len(set([rnd_i, rnd_j, rnd_k, rnd_l])) == 4:
                 return (rnd_i, rnd_j, rnd_k, rnd_l)
+        return (-1, -1, -1, -1)

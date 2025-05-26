@@ -129,12 +129,12 @@ class SIS:
             os.remove(gif_name + str(fileNo) + ".png")
         return True
 
-    def Gillespie(self, tmax, animate=False, samplingRate=0, rho=1):
+    def Gillespie(self, tmax, animate=False, samplingRate=0.0, rho=1.0):
         tmaxFixed = False
         if animate:
             self.active_IS_channels = []
         while (self.t <= tmax) and (self.Is[-1] > 0):
-            if self.Cs[-1] >= self.N * rho and not tmaxFixed[-1]:
+            if self.Cs[-1] >= self.N * rho and not tmaxFixed:
                 tmax = self.t * 1.1
                 tmaxFixed = True
             I_idxs = np.where(self.I == 1)[0]
