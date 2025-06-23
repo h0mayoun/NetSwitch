@@ -14,6 +14,7 @@ import sys
 
 graphDef = sys.argv[1]
 id1, id2, id3 = sys.argv[2], sys.argv[3], sys.argv[4]
+print(sys.argv)
 Gs = [
     read_Graph("result/{}/SWPC/{}.mtx".format(graphDef, id1)),
     read_Graph("result/{}/SWPC/{}.mtx".format(graphDef, id2)),
@@ -32,16 +33,22 @@ for graph, label in zip(Gs, labels):
 
     # Parameter setting to run Kuramoto simulations
     omegas = np.random.normal(size=N).astype("float32")
-    num_couplings = 100
-    coup_min, coup_max = 0.01, 0.4
-    couplings = np.linspace(coup_min, coup_max, num_couplings)
+    num_mid_couplings = 50
+    num_couplings = 80
+    coup_min, coup_mid, coup_max = 0.001, 0.12, 0.3
+    couplings = np.hstack(
+        (
+            np.linspace(coup_min, coup_mid, num_mid_couplings + 1)[:-1],
+            np.linspace(coup_mid, coup_max, num_couplings - num_mid_couplings),
+        )
+    )
     phases = np.array(
         [np.random.uniform(-np.pi, np.pi, N) for i_l in range(num_couplings)],
         dtype=np.float32,
     )
     precision = 32
-    dt = 0.001
-    num_temps = 10000
+    dt = 0.01
+    num_temps = 1000 / dt
     total_time = dt * num_temps
     total_time_transient = total_time
     transient = False

@@ -13,36 +13,18 @@ import sys
 import matplotlib as mpl
 
 
-def is_dominated(p1, p2):
-    """Returns True if p1 is dominated by p2 (maximization)."""
-    return p1[0] <= p2[0] and p1[1] <= p2[1] and (p1[0] < p2[0] or p1[1] < p2[1])
-
-
-def add_point_to_pareto_front(pareto_front, new_point):
-    """Adds a new point to the Pareto front (maximization) if it's not dominated."""
-    # Filter out points dominated by the new point
-    pareto_front = [p for p in pareto_front if not is_dominated(p, new_point)]
-
-    # Check if new point is dominated by any remaining point
-    if any(is_dominated(new_point, p) for p in pareto_front):
-        return pareto_front  # Don't add it
-
-    pareto_front.append(new_point)
-    return pareto_front
 
 
 plt.rcParams.update(
     {"text.usetex": True, "font.family": "STIXGeneral", "mathtext.fontset": "stix"}
 )
 
-cmap = mpl.colormaps["tab10"]
 
 seed1 = 1
 seed2 = 1
-# np.random.seed(seed1)
 random.seed(seed2)
 
-n = 64
+n = 256
 p = np.log2(n) * 1.1 / n
 kn = int(np.ceil(np.log2(n)))
 graphtype = "BA"
@@ -53,47 +35,6 @@ elif graphtype == "BA":
     graph = ig.Graph.Barabasi(n=n, m=kn)
     graph_des = "BA-n={}-k={}-seed=({},{})".format(n, kn, seed1, seed2)
 
-algs = [
-    "SWPC",
-    "RAND",
-    "GRDY",
-]  # , "SWPC", "ModA-G"]
-lbls = [
-    "ACAR",
-    "Others",
-    "GRDY",
-]
-marker = ["s", "x", "o"]
-reps = [0, 0, 0]
-l2levels = np.linspace(0, 0.05, 11)
-
-cc = [
-    "#a6cee3",
-    "#1f78b4",
-    "#b2df8a",
-    "#33a02c",
-    "#fb9a99",
-    "#e31a1c",
-    "#fdbf6f",
-    "#ff7f00",
-    "#cab2d6",
-    "#6a3d9a",
-    "#ffff99",
-    "#b15928",
-]
-
-
-colors = [
-    "#ff7f00",
-    "#6a3d9a",
-    "#e31a1c",
-]
-if os.path.exists("result/{}/pareto.pkl".format(graph_des)):
-    with open("result/{}/pareto.pkl".format(graph_des), "rb") as f:
-        paretoFronts = pickle.load(f)
-else: 
-    paretoFronts = {alg: [] for alg in algs}
-print(paretoFronts)
 # colors = cmap(np.linspace(0, 1, len(algs)))
 step = [1, 1, 1]
 fig, ax = plt.subplots(figsize=(4, 4))
@@ -163,8 +104,6 @@ with open("result/{}/pareto.pkl".format(graph_des), "wb") as f:
     pickle.dump(paretoFronts, f)
 
 for cnt, alg in enumerate(algs):
-    if alg == "GRDY":
-        continue
     paretoFronts[alg].sort(key=lambda p: p[0])
     x = [i[0] / mu_1 for i in paretoFronts[alg]]
     y = [i[1] / la_2 for i in paretoFronts[alg]]
@@ -191,4 +130,4 @@ ax.spines["top"].set_visible(False)
 ax.spines["right"].set_visible(False)
 ax.legend(frameon=False, markerscale=2)
 plt.tight_layout()
-plt.savefig("ESA-Fig-5.png", dpi=300)
+plt.savefig("ESA-Fig-5.pdf", dpi=300)

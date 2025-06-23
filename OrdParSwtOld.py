@@ -3,7 +3,7 @@ import numpy as np
 import igraph as ig
 import matplotlib.pyplot as plt
 from matplotlib import colors
-from NetSwitchAlgsMod import NetSwitch
+from local.NetSwitchAlgsMod import NetSwitch
 import csv
 import sys
 import matplotlib.animation as animation

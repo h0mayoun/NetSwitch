@@ -1,5 +1,5 @@
 from SIS import *
-from NetSwitchAlgsMod import *
+from local.NetSwitchAlgsMod import *
 from collections import namedtuple
 from readGraph import read_Graph
 import pickle
@@ -7,9 +7,9 @@ import sys
 
 np.set_printoptions(precision=1, suppress=True)
 tmax = 1e9
-scale = 10
+scale = 100
 # G = read_Graph("result/BA-n=1024-k=10-seed=(1,1)/GRDY/7000.mtx")
-# 1024 16000 1000
+# 1024 16000 1100
 graphDef = sys.argv[1]
 id1, id2, id3 = sys.argv[2], sys.argv[3], sys.argv[4]
 Gs = [
@@ -26,10 +26,12 @@ lambda1 = np.max(np.real(np.linalg.eigvals(Gs[0])))
 k = np.sum(Gs[0], axis=0)
 
 print(1 / lambda1, np.mean(k) / np.mean(k**2))
-iterCnt = 500
-rho = 1.0
+iterCnt = 100
+rho = 0.99
 color = ["tab:blue", "tab:orange", "tab:green"]
-betaList = np.linspace(0.5, 1.5, 21)
+betaList = np.hstack(
+    (np.linspace(0.5, 0.8, 4), np.linspace(0.85, 1.15, 7), np.linspace(1.2, 1.5, 4))
+)
 savedata = {
     label: {beta: {} for beta in betaList} for label in labels
 }  # {beta: {} for beta in betaList}

@@ -1,4 +1,4 @@
-from NetSwitchAlgsMod import *
+from local.NetSwitchAlgsMod import *
 import pickle
 import random
 import igraph as ig

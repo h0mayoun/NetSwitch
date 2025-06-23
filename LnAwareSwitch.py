@@ -3,7 +3,7 @@ import numpy as np
 import igraph as ig
 import matplotlib.pyplot as plt
 from matplotlib import colors
-from NetSwitchAlgsMod import NetSwitch
+from local.NetSwitchAlgsMod import NetSwitch
 import sys
 
 np.set_printoptions(precision=2)

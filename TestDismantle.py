@@ -1,6 +1,6 @@
 from SIS import *
 from OptiMantle import *
-from NetSwitchAlgsMod import *
+from local.NetSwitchAlgsMod import *
 from collections import namedtuple
 from readGraph import read_Graph
 import pickle

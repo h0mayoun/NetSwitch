@@ -442,7 +442,7 @@ class NetSwitch:
         # print(self.B, self.total_checkers())
         return best_swt
 
-    def switch_A(self, alg="RAND", count=-1,**kwargs):
+    def switch_A(self, alg="RAND", count=-1, **kwargs):
         """Performs a number of switchings with a specified algorithm on the adjacency matrix
         The number of switchings to perform is input by the 'count' argument
         count=-1 results in continous switchings until no checkerboard is left
@@ -478,11 +478,15 @@ class NetSwitch:
                 case "SWPC":
                     if self.swt_done == 0:
                         if "l2lim" not in kwargs:
-                            self.org_nl2 = self.l2(normed=True)
+                            self.cur_nl2 = self.l2(normed=True)
+                            self.org_nl2 = self.cur_nl2
                         else:
-                            self.org_nl2 = self.l2(normed=True) * kwargs["l2lim"]
+                            self.cur_nl2 = self.l2(normed=True)
+                            self.org_nl2 = self.cur_nl2 * kwargs["l2lim"]
+                            # cur_nl2 = self.l2(normed=True)
 
                     cswitch_found = False
+
                     while not cswitch_found:
                         if self.total_checkers() == 0:
                             break
@@ -499,20 +503,22 @@ class NetSwitch:
                         fvec = eig_vecs[:, 1]
                         for curk, curl in all_kls:
                             swt = randi, randj, curk, curl
-                            delta = (
-                                fvec[randi] / np.sqrt(self.deg[randi])
-                                - fvec[randj] / np.sqrt(self.deg[randj])
-                            ) * (
-                                fvec[curk] / np.sqrt(self.deg[curk])
-                                - fvec[curl] / np.sqrt(self.deg[curl])
-                            )
-                            if delta > 0:
-                                self.swt_rejected += 1
-                                continue
+                            # delta = (
+                            #     fvec[randi] / np.sqrt(self.deg[randi])
+                            #     - fvec[randj] / np.sqrt(self.deg[randj])
+                            # ) * (
+                            #     fvec[curk] / np.sqrt(self.deg[curk])
+                            #     - fvec[curl] / np.sqrt(self.deg[curl])
+                            # )
+                            # if delta > 0:
+                            #     self.swt_rejected += 1
+                            #     continue
                             self.switch(swt, update_N=False)
                             new_nl2 = self.l2(normed=True)
-                            if new_nl2 >= self.org_nl2:
-                                #print(self.swt_done)
+                            if new_nl2 >= self.cur_nl2 or new_nl2 >= self.org_nl2:
+                                if new_nl2 >= self.cur_nl2:
+                                    self.cur_nl2 = new_nl2
+                                # print(self.swt_done)
                                 self.update_N(swt)
                                 cswitch_found = True
                                 break
@@ -1110,9 +1116,7 @@ class NetSwitch:
 
     def plotAdjacencyImage(self, ax, s=None):
         if not isinstance(s, list) and not isinstance(s, np.ndarray):
-            _, s = np.linalg.eig(self.M.astype(float))
-            idx = np.argsort(_)
-            s = np.sign(np.real(s[:, idx[self.n - 1]])).reshape(-1, 1)
+            s = np.ones((self.n,1))
 
         score = (s.T @ self.M @ s)[0, 0]
         # print(score)
@@ -1131,7 +1135,7 @@ class NetSwitch:
         _[1] = 0
         _[2] = 1
         _[3] = 3
-        cmap = colors.ListedColormap(["blue", "white", "green", "red"])
+        cmap = colors.ListedColormap(["#1f78b4", "white", "#33a02c", "#e31a1c"])
         img = np.hstack((img, _))
         ax.imshow(img, cmap=cmap)
         ax.set_xlim([-0.5, self.n - 0.5])
