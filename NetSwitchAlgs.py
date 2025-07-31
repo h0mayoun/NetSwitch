@@ -27,8 +27,6 @@ def remove_value(arr, val):
     mask = (arr != val)
     return arr[mask]
 
-print(remove_value(np.array([1, 2, 3, 4, 2, 1, 2]), 2))
-
 @jit(nopython=True)
 def count_rowpair_checkers_fast_upperswt(A, i, j, pos_only=True):
     '''Similar to self.count_rowpair_checkers_fast(i, j)
@@ -135,8 +133,7 @@ class NetMat:
         '''Calculates the assortativity coefficient for a graph
         from its binary adjacncy matrix.
         Calculations based on [PHYSICAL REVIEW E 84, 047101 (2011)].'''
-        r_coeff = assortativity_coeff(self.A, self.deg, zagreb=zagreb)
-        return r_coeff if zagreb else r_coeff[0]
+        return assortativity_coeff(self.A, self.deg, zagreb=zagreb)
 
     def laplacian(self):
         return np.diag(self.deg) - self.A
@@ -153,9 +150,9 @@ class NetMat:
         eig_val = eigsh(self.A.astype(float), k=1, which='LM', return_eigenvectors=False)[0]
         return eig_val
 
-    def get_edges(self, return_set=True):
+    def get_edges(self):
         edge_coords = np.where(np.triu(self.A) == 1)
-        return set(zip(edge_coords[0], edge_coords[1])) if return_set else list(zip(edge_coords[0], edge_coords[1]))
+        return edge_coords#set(zip(edge_coords[0], edge_coords[1]))
 
 
 class NetSwitch(NetMat):
