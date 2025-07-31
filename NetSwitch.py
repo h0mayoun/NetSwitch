@@ -42,7 +42,7 @@ def count_rowpair_checkers_fast_upperswt(A, i, j, pos_only=True):
         pos_count = int(all_rightsides_pos[0] * (cumsum_checkers.size + 1) + np.sum(cumsum_checkers))
 
     if not pos_only:
-        all_rightsides_neg = np.nonzero(A[i, all_checkerboard_sides])[0]
+        all_rightsides_neg = np.nonzero(1 - A[i, all_checkerboard_sides])[0]
         if all_rightsides_neg.size == 0:
             neg_count = int(0)
         else:
